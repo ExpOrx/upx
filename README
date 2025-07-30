@@ -1,4 +1,76 @@
-                 ooooo     ooo  ooooooooo.  ooooooo  ooooo
+# Windows UPX
+```
+sudo apt install git build-essential mingw-w64
+git clone https://github.com/ExpOrx/upx.git
+cd upx
+git submodule update --init --recursive
+rm -rf .git
+cmake .   -DCMAKE_SYSTEM_NAME=Windows   -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc   -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++   -DCMAKE_BUILD_TYPE=Release   -DCMAKE_C_FLAGS="-static-libgcc"   -DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++"   -DCMAKE_EXE_LINKER_FLAGS="-static"
+make
+
+lab@ubuntu:/upx$ x86_64-w64-mingw32-objdump -p upx.exe | grep "DLL Name"
+	DLL Name: KERNEL32.dll
+	DLL Name: msvcrt.dll
+
+OK!!!!!!!!!!!!!!!!!!!
+
+PS C:\Users\LAB> C:\Users\LAB\upx\upx.exe
+                       Ultimate Packer for eXecutables
+                          Copyright (C) 1996 - 2025
+UPX 5.0.3       Markus Oberhumer, Laszlo Molnar & John Reiser   Jul 21st 2025
+
+Usage: upx [-123456789dlthVL] [-qvfk] [-o file] file..
+
+Commands:
+  -1     compress faster                   -9    compress better
+  -d     decompress                        -l    list compressed file
+  -t     test compressed file              -V    display version number
+  -h     give more help                    -L    display software license
+Options:
+  -q     be quiet                          -v    be verbose
+  -oFILE write output to 'FILE'
+  -f     force compression of suspicious files
+  -k     keep backup files
+file..   executables to (de)compress
+
+Type 'upx --help' for more detailed help.
+
+UPX comes with ABSOLUTELY NO WARRANTY; for details visit https://upx.github.io
+```
+
+# Linux UPX
+```
+sudo apt install git build-essential libucl-dev zlib1g-dev
+git clone https://github.com/ExpOrx/upx.git
+cd upx
+git submodule update --init --recursive
+make
+lab@ubuntu:/mnt/upx$ ./build/release/upx 
+                       Ultimate Packer for eXecutables
+                          Copyright (C) 1996 - 2025
+UPX 5.0.3       Markus Oberhumer, Laszlo Molnar & John Reiser   Jul 21st 2025
+
+Usage: upx [-123456789dlthVL] [-qvfk] [-o file] file..
+
+Commands:
+  -1     compress faster                   -9    compress better
+  -d     decompress                        -l    list compressed file
+  -t     test compressed file              -V    display version number
+  -h     give more help                    -L    display software license
+Options:
+  -q     be quiet                          -v    be verbose
+  -oFILE write output to 'FILE'
+  -f     force compression of suspicious files
+  -k     keep backup files
+file..   executables to (de)compress
+
+Type 'upx --help' for more detailed help.
+
+UPX comes with ABSOLUTELY NO WARRANTY; for details visit https://upx.github.io
+```
+
+
+ooooo     ooo  ooooooooo.  ooooooo  ooooo
                  `888'     `8'  `888   `Y88. `8888    d8'
                   888       8    888   .d88'   Y888..8P
                   888       8    888ooo88P'     `8888'
