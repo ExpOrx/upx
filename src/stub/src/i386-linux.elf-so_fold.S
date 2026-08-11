@@ -1,4 +1,4 @@
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
 #define section .section
 NBPW= 4

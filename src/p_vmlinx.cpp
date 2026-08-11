@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2025 John Reiser
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) John Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -37,6 +37,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_vmlinx.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -787,7 +789,7 @@ Linker* PackVmlinuxI386::newLinker() const
 void PackVmlinuxI386::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_i386_linux_kernel_vmlinux, sizeof(stub_i386_linux_kernel_vmlinux));
+    initLoader(EM_386, stub_i386_linux_kernel_vmlinux, sizeof(stub_i386_linux_kernel_vmlinux));
     addLoader("LINUX000",
               (0x40==(0xf0 & ft->id)) ? "LXCKLLT1" : (ft->id ? "LXCALLT1" : ""),
               "LXMOVEUP",
@@ -812,7 +814,7 @@ void PackVmlinuxI386::buildLoader(const Filter *ft)
 void PackVmlinuxAMD64::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_amd64_linux_kernel_vmlinux, sizeof(stub_amd64_linux_kernel_vmlinux));
+    initLoader(EM_AMD64, stub_amd64_linux_kernel_vmlinux, sizeof(stub_amd64_linux_kernel_vmlinux));
     addLoader("LINUX000",
               (0x40==(0xf0 & ft->id)) ? "LXCKLLT1" : (ft->id ? "LXCALLT1" : ""),
               "LXMOVEUP",
@@ -878,7 +880,7 @@ Linker* PackVmlinuxPPC64LE::newLinker() const
 void PackVmlinuxARMEL::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_arm_v5a_linux_kernel_vmlinux, sizeof(stub_arm_v5a_linux_kernel_vmlinux));
+    initLoader(EM_ARM, stub_arm_v5a_linux_kernel_vmlinux, sizeof(stub_arm_v5a_linux_kernel_vmlinux));
     addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
@@ -900,7 +902,7 @@ void PackVmlinuxARMEL::buildLoader(const Filter *ft)
 void PackVmlinuxARMEB::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_armeb_v5a_linux_kernel_vmlinux, sizeof(stub_armeb_v5a_linux_kernel_vmlinux));
+    initLoader(EM_ARM, stub_armeb_v5a_linux_kernel_vmlinux, sizeof(stub_armeb_v5a_linux_kernel_vmlinux));
     addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
@@ -922,7 +924,7 @@ void PackVmlinuxARMEB::buildLoader(const Filter *ft)
 void PackVmlinuxPPC32::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_powerpc_linux_kernel_vmlinux, sizeof(stub_powerpc_linux_kernel_vmlinux));
+    initLoader(EM_PPC, stub_powerpc_linux_kernel_vmlinux, sizeof(stub_powerpc_linux_kernel_vmlinux));
     addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);
@@ -949,7 +951,7 @@ static const CLANG_FORMAT_DUMMY_STATEMENT
 void PackVmlinuxPPC64LE::buildLoader(const Filter *ft)
 {
     // prepare loader
-    initLoader(stub_powerpc64le_linux_kernel_vmlinux, sizeof(stub_powerpc64le_linux_kernel_vmlinux));
+    initLoader(EM_PPC, stub_powerpc64le_linux_kernel_vmlinux, sizeof(stub_powerpc64le_linux_kernel_vmlinux));
     addLoader("LINUX000", nullptr);
     if (ft->id) {
         assert(ft->calls > 0);

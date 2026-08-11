@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UCL data compression library.
 ;
-;  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
 ;  All Rights Reserved.
 ;
 ;  The UCL library is free software; you can redistribute it and/or
@@ -106,6 +106,15 @@
 #endif  /*}*/
 
 
+DEBUG_NRV= 0
+.if DEBUG_NRV  //{ registers used
+LEN_ROV= 0x100000
+#define dst0   s0
+#define src0   s1
+#define hi_rov s2
+#define prov   s3
+.endif  //} DEBUG_NRV
+
 ;//////////////////////////////////////
 ;// init bitaccess
 ;//////////////////////////////////////
@@ -136,6 +145,16 @@
 .macro  init
 
 init_sz = .
+
+.if DEBUG_NRV  //{ initialize the data pointers
+        PUSH4 s0,s1,s2,s3
+        move dst0,dst
+        move src0,src_ilen
+        move hi_rov,sp
+        li prov,LEN_ROV
+        sub prov,sp,prov
+        move sp,prov
+.endif  // DEBUG_NRV
 
 .if (JOHN == 0)
             move    bc,zero
@@ -481,6 +500,16 @@ init_sz = . - init_sz
             local   wordchk, prepbcpy
             local   bcopy, skip
 
+.if DEBUG_NRV  //{ store the params to memcpy
+    beq prov,hi_rov,0f
+    sub at,dst,dst0
+    sw  at,     2*4(prov)
+    sb m_len,3+ 2*4(prov)
+    neg at,m_off
+    sw at,      3*4(prov)
+    addiu prov,prov,4*4
+0:
+.endif  // DEBUG_NRV }
 .if (UCL_FAST == 1)
             slti    var,m_off,4
             bnez    var,prepbcpy

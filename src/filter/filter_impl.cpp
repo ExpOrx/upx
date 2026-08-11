@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -144,7 +144,33 @@
 #include "ppcbxx.h"
 #define F s_ppcbxx
 #include "ppcbxx.h"
+
 #undef COND
+
+/*************************************************************************
+// RISC-V AUIPC
+**************************************************************************/
+
+#define F f_auipc_le
+#define U u_auipc_le
+#include "auipc.h"
+#undef U
+#undef F
+#undef opu
+#undef func3u
+#undef rs1u
+
+#define F s_auipc_le
+#include "auipc.h"
+#undef F
+
+#undef opf
+#undef func3f
+#undef rs1f
+
+#undef COND
+#undef CONDf
+#undef CONDu
 
 /*************************************************************************
 // database for use in class Filter
@@ -219,6 +245,8 @@
     // 26-bit calltrick for arm64; also 19-bit and 14-bit
     { 0x52, 8, 0x03ffffff, f_CTarm64_le, u_CTarm64_le, s_CTarm64_le },
 #endif  //}
+
+    { 0x55, 8, 0x40000000, f_auipc_le, u_auipc_le, s_auipc_le},
 
     // 32-bit cto calltrick with jmp and jcc(swap 0x0f/0x8Y) and relative renumbering
     { 0x80, 8, 0x00ffffff, f_ctojr32_e8e9_bswap_le, u_ctojr32_e8e9_bswap_le, s_ctojr32_e8e9_bswap_le },

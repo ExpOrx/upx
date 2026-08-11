@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -32,6 +32,241 @@
 // #include <type_traits>
 
 namespace upx {
+
+/*************************************************************************
+// compile_time
+**************************************************************************/
+
+namespace compile_time {
+
+constexpr std::size_t string_len(const char *a) noexcept {
+    return *a == '\0' ? 0 : 1 + string_len(a + 1);
+}
+constexpr bool string_eq(const char *a, const char *b) noexcept {
+    return *a == *b && (*a == '\0' || string_eq(a + 1, b + 1));
+}
+constexpr bool string_lt(const char *a, const char *b) noexcept {
+    return (uchar) *a < (uchar) *b || (*a != '\0' && *a == *b && string_lt(a + 1, b + 1));
+}
+forceinline constexpr bool string_ne(const char *a, const char *b) noexcept {
+    return !string_eq(a, b);
+}
+forceinline constexpr bool string_gt(const char *a, const char *b) noexcept {
+    return string_lt(b, a);
+}
+forceinline constexpr bool string_le(const char *a, const char *b) noexcept {
+    return !string_lt(b, a);
+}
+forceinline constexpr bool string_ge(const char *a, const char *b) noexcept {
+    return !string_lt(a, b);
+}
+
+constexpr bool mem_eq(const char *a, const char *b, std::size_t n) noexcept {
+    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+}
+constexpr bool mem_eq(const unsigned char *a, const unsigned char *b, std::size_t n) noexcept {
+    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
+}
+constexpr bool mem_eq(const char *a, const unsigned char *b, std::size_t n) noexcept {
+    return n == 0 || ((uchar) *a == *b && mem_eq(a + 1, b + 1, n - 1));
+}
+constexpr bool mem_eq(const unsigned char *a, const char *b, std::size_t n) noexcept {
+    return n == 0 || (*a == (uchar) *b && mem_eq(a + 1, b + 1, n - 1));
+}
+
+constexpr void mem_set(char *p, char c, std::size_t n) noexcept {
+    (void) (n == 0 || (*p = c, mem_set(p + 1, c, n - 1), 0));
+}
+constexpr void mem_set(unsigned char *p, unsigned char c, std::size_t n) noexcept {
+    (void) (n == 0 || (*p = c, mem_set(p + 1, c, n - 1), 0));
+}
+forceinline constexpr void mem_clear(char *p, std::size_t n) noexcept { mem_set(p, (char) 0, n); }
+forceinline constexpr void mem_clear(unsigned char *p, std::size_t n) noexcept {
+    mem_set(p, (unsigned char) 0, n);
+}
+
+forceinline constexpr upx_uint16_t bswap16(upx_uint16_t v) noexcept {
+    typedef unsigned U;
+    return (upx_uint16_t) ((((U) v >> 8) & 0xff) | (((U) v & 0xff) << 8));
+}
+forceinline constexpr upx_uint32_t bswap32(upx_uint32_t v) noexcept {
+    typedef upx_uint32_t U;
+    return (upx_uint32_t) ((((U) v >> 24) & 0xff) | (((U) v >> 8) & 0xff00) |
+                           (((U) v & 0xff00) << 8) | (((U) v & 0xff) << 24));
+}
+forceinline constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept {
+    // return (upx_uint64_t) (((upx_uint64_t) bswap32((upx_uint32_t) v) << 32) |
+    //                        bswap32((upx_uint32_t) (v >> 32)));
+    return ((v & 0xff) << 56) | ((v & 0xff00) << 40) | ((v & 0xff0000) << 24) |
+           ((v & 0xff000000) << 8) | ((v >> 8) & 0xff000000) | ((v >> 24) & 0xff0000) |
+           ((v >> 40) & 0xff00) | ((v >> 56) & 0xff);
+}
+
+forceinline constexpr upx_uint16_t get_be16(const byte *p) noexcept {
+    typedef unsigned U;
+    return (upx_uint16_t) (((U) p[0] << 8) | ((U) p[1] << 0));
+}
+forceinline constexpr upx_uint32_t get_be24(const byte *p) noexcept {
+    typedef upx_uint32_t U;
+    return (upx_uint32_t) (((U) p[0] << 16) | ((U) p[1] << 8) | ((U) p[2] << 0));
+}
+forceinline constexpr upx_uint32_t get_be32(const byte *p) noexcept {
+    typedef upx_uint32_t U;
+    return (upx_uint32_t) (((U) p[0] << 24) | ((U) p[1] << 16) | ((U) p[2] << 8) | ((U) p[3] << 0));
+}
+forceinline constexpr upx_uint64_t get_be64(const byte *p) noexcept {
+    typedef upx_uint64_t U;
+    return (upx_uint64_t) (((U) p[0] << 56) | ((U) p[1] << 48) | ((U) p[2] << 40) |
+                           ((U) p[3] << 32) | ((U) p[4] << 24) | ((U) p[5] << 16) |
+                           ((U) p[6] << 8) | ((U) p[7] << 0));
+}
+
+forceinline constexpr void set_be16(byte *p, upx_uint16_t v) noexcept {
+    p[0] = (byte) ((v >> 8) & 0xff);
+    p[1] = (byte) ((v >> 0) & 0xff);
+}
+forceinline constexpr void set_be24(byte *p, upx_uint32_t v) noexcept {
+    p[0] = (byte) ((v >> 16) & 0xff);
+    p[1] = (byte) ((v >> 8) & 0xff);
+    p[2] = (byte) ((v >> 0) & 0xff);
+}
+forceinline constexpr void set_be32(byte *p, upx_uint32_t v) noexcept {
+    p[0] = (byte) ((v >> 24) & 0xff);
+    p[1] = (byte) ((v >> 16) & 0xff);
+    p[2] = (byte) ((v >> 8) & 0xff);
+    p[3] = (byte) ((v >> 0) & 0xff);
+}
+forceinline constexpr void set_be64(byte *p, upx_uint64_t v) noexcept {
+    p[0] = (byte) ((v >> 56) & 0xff);
+    p[1] = (byte) ((v >> 48) & 0xff);
+    p[2] = (byte) ((v >> 40) & 0xff);
+    p[3] = (byte) ((v >> 32) & 0xff);
+    p[4] = (byte) ((v >> 24) & 0xff);
+    p[5] = (byte) ((v >> 16) & 0xff);
+    p[6] = (byte) ((v >> 8) & 0xff);
+    p[7] = (byte) ((v >> 0) & 0xff);
+}
+
+forceinline constexpr upx_uint16_t get_le16(const byte *p) noexcept {
+    typedef unsigned U;
+    return (upx_uint16_t) (((U) p[0] << 0) | ((U) p[1] << 8));
+}
+forceinline constexpr upx_uint32_t get_le24(const byte *p) noexcept {
+    typedef upx_uint32_t U;
+    return (upx_uint32_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16));
+}
+forceinline constexpr upx_uint32_t get_le32(const byte *p) noexcept {
+    typedef upx_uint32_t U;
+    return (upx_uint32_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16) | ((U) p[3] << 24));
+}
+forceinline constexpr upx_uint64_t get_le64(const byte *p) noexcept {
+    typedef upx_uint64_t U;
+    return (upx_uint64_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16) | ((U) p[3] << 24) |
+                           ((U) p[4] << 32) | ((U) p[5] << 40) | ((U) p[6] << 48) |
+                           ((U) p[7] << 56));
+}
+
+forceinline constexpr void set_le16(byte *p, upx_uint16_t v) noexcept {
+    p[0] = (byte) ((v >> 0) & 0xff);
+    p[1] = (byte) ((v >> 8) & 0xff);
+}
+forceinline constexpr void set_le24(byte *p, upx_uint32_t v) noexcept {
+    p[0] = (byte) ((v >> 0) & 0xff);
+    p[1] = (byte) ((v >> 8) & 0xff);
+    p[2] = (byte) ((v >> 16) & 0xff);
+}
+forceinline constexpr void set_le32(byte *p, upx_uint32_t v) noexcept {
+    p[0] = (byte) ((v >> 0) & 0xff);
+    p[1] = (byte) ((v >> 8) & 0xff);
+    p[2] = (byte) ((v >> 16) & 0xff);
+    p[3] = (byte) ((v >> 24) & 0xff);
+}
+forceinline constexpr void set_le64(byte *p, upx_uint64_t v) noexcept {
+    p[0] = (byte) ((v >> 0) & 0xff);
+    p[1] = (byte) ((v >> 8) & 0xff);
+    p[2] = (byte) ((v >> 16) & 0xff);
+    p[3] = (byte) ((v >> 24) & 0xff);
+    p[4] = (byte) ((v >> 32) & 0xff);
+    p[5] = (byte) ((v >> 40) & 0xff);
+    p[6] = (byte) ((v >> 48) & 0xff);
+    p[7] = (byte) ((v >> 56) & 0xff);
+}
+
+forceinline constexpr upx_uint16_t get_ne16(const byte *p) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    return get_be16(p);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    return get_le16(p);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr upx_uint32_t get_ne24(const byte *p) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    return get_be24(p);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    return get_le24(p);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr upx_uint32_t get_ne32(const byte *p) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    return get_be32(p);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    return get_le32(p);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr upx_uint64_t get_ne64(const byte *p) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    return get_be64(p);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    return get_le64(p);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+
+forceinline constexpr void set_ne16(byte *p, upx_uint16_t v) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    set_be16(p, v);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    set_le16(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr void set_ne24(byte *p, upx_uint32_t v) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    set_be24(p, v);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    set_le24(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr void set_ne32(byte *p, upx_uint32_t v) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    set_be32(p, v);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    set_le32(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+forceinline constexpr void set_ne64(byte *p, upx_uint64_t v) noexcept {
+#if (ACC_ABI_BIG_ENDIAN)
+    set_be64(p, v);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+    set_le64(p, v);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
+}
+
+} // namespace compile_time
 
 /*************************************************************************
 // core util
@@ -141,16 +376,17 @@ private:                                                                        
 #define UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Klass) private:
 #endif
 
-class noncopyable {
+class NonCopyAble /*not_final*/ {
 protected:
-    forceinline constexpr noncopyable() noexcept {}
+    forceinline constexpr NonCopyAble() noexcept {}
 #if __cplusplus >= 202002L
-    forceinline constexpr ~noncopyable() noexcept = default;
+    forceinline constexpr ~NonCopyAble() noexcept = default;
 #else
-    forceinline ~noncopyable() noexcept = default;
+    forceinline ~NonCopyAble() noexcept = default;
 #endif
-    UPX_CXX_DISABLE_COPY_MOVE(noncopyable)
+    UPX_CXX_DISABLE_COPY_MOVE(NonCopyAble)
 };
+typedef NonCopyAble noncopyable;
 
 /*************************************************************************
 // <type_traits>
@@ -168,9 +404,9 @@ inline constexpr bool is_bounded_array_v = is_bounded_array<T>::value;
 template <class T, class... Ts>
 struct is_same_all : public std::conjunction<std::is_same<T, Ts>...> {};
 template <class T, class... Ts>
-inline constexpr bool is_same_all_v = is_same_all<T, Ts...>::value;
-template <class T, class... Ts>
 struct is_same_any : public std::disjunction<std::is_same<T, Ts>...> {};
+template <class T, class... Ts>
+inline constexpr bool is_same_all_v = is_same_all<T, Ts...>::value;
 template <class T, class... Ts>
 inline constexpr bool is_same_any_v = is_same_any<T, Ts...>::value;
 
@@ -195,7 +431,7 @@ using type_identity_t = typename type_identity<T>::type;
 **************************************************************************/
 
 template <class T>
-forceinline constexpr bool has_single_bit(T x) noexcept {
+forceinline constexpr bool has_single_bit(const T &x) noexcept {
     return !(x == 0) && (x & (x - 1)) == 0;
 }
 
@@ -261,7 +497,6 @@ forceinline constexpr T wrapping_add(const T &a, const T &b) noexcept {
     typedef std::make_unsigned_t<T> U;
     return T(U(a) + U(b));
 }
-
 template <class T>
 forceinline constexpr T wrapping_sub(const T &a, const T &b) noexcept {
     static_assert(std::is_integral_v<T>);
@@ -283,21 +518,14 @@ struct UnsignedSizeOf final {
 template <class Result, class From>
 forceinline constexpr Result ptr_static_cast(From *ptr) noexcept {
     static_assert(std::is_pointer_v<Result>);
+    typedef std::conditional_t<std::is_const_v<std::remove_pointer_t<Result> >, const void *,
+                               void *>
+        VoidPtr;
     // don't cast through "void *" if type is convertible
-    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, void *>
-        VoidPtr;
+    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, VoidPtr>
+        ResultPtr;
     // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    return static_cast<Result>(static_cast<VoidPtr>(ptr));
-}
-template <class Result, class From>
-forceinline constexpr Result ptr_static_cast(const From *ptr) noexcept {
-    static_assert(std::is_pointer_v<Result>);
-    static_assert(std::is_const_v<std::remove_pointer_t<Result> >); // required
-    // don't cast through "const void *" if type is convertible
-    typedef std::conditional_t<std::is_convertible_v<decltype(ptr), Result>, Result, const void *>
-        VoidPtr;
-    // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    return static_cast<Result>(static_cast<VoidPtr>(ptr));
+    return static_cast<Result>(static_cast<ResultPtr>(ptr));
 }
 
 #if WITH_THREADS
@@ -340,6 +568,7 @@ forceinline T atomic_exchange(T *ptr, T new_value) noexcept {
 // helper classes so we don't leak memory on exceptions
 template <class T>
 struct ObjectDeleter final {
+    static_assert(std::is_nothrow_destructible_v<T>);
     T **items;         // public
     std::size_t count; // public
     explicit ObjectDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
@@ -350,10 +579,10 @@ struct ObjectDeleter final {
             delete item; // single object delete
         }
     }
-    static_assert(std::is_nothrow_destructible_v<T>);
 };
 template <class T>
 struct ArrayDeleter final {
+    static_assert(std::is_nothrow_destructible_v<T>);
     T **items;         // public
     std::size_t count; // public
     explicit ArrayDeleter(T **p, std::size_t n) noexcept : items(p), count(n) {}
@@ -364,7 +593,6 @@ struct ArrayDeleter final {
             delete[] item; // array delete
         }
     }
-    static_assert(std::is_nothrow_destructible_v<T>);
 };
 template <class T>
 struct MallocDeleter final {
@@ -375,226 +603,11 @@ struct MallocDeleter final {
     void delete_items() noexcept {
         for (std::size_t i = 0; i < count; i++) {
             T *item = atomic_exchange(&items[i], (T *) nullptr);
+            // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
             ::free(item); // free memory from malloc()
         }
     }
 };
-
-/*************************************************************************
-// compile_time
-**************************************************************************/
-
-namespace compile_time {
-
-constexpr std::size_t string_len(const char *a) noexcept {
-    return *a == '\0' ? 0 : 1 + string_len(a + 1);
-}
-constexpr bool string_eq(const char *a, const char *b) noexcept {
-    return *a == *b && (*a == '\0' || string_eq(a + 1, b + 1));
-}
-constexpr bool string_lt(const char *a, const char *b) noexcept {
-    return (uchar) *a < (uchar) *b || (*a != '\0' && *a == *b && string_lt(a + 1, b + 1));
-}
-forceinline constexpr bool string_ne(const char *a, const char *b) noexcept {
-    return !string_eq(a, b);
-}
-forceinline constexpr bool string_gt(const char *a, const char *b) noexcept {
-    return string_lt(b, a);
-}
-forceinline constexpr bool string_le(const char *a, const char *b) noexcept {
-    return !string_lt(b, a);
-}
-forceinline constexpr bool string_ge(const char *a, const char *b) noexcept {
-    return !string_lt(a, b);
-}
-
-constexpr bool mem_eq(const char *a, const char *b, std::size_t n) noexcept {
-    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
-}
-constexpr bool mem_eq(const unsigned char *a, const unsigned char *b, std::size_t n) noexcept {
-    return n == 0 || (*a == *b && mem_eq(a + 1, b + 1, n - 1));
-}
-constexpr bool mem_eq(const char *a, const unsigned char *b, std::size_t n) noexcept {
-    return n == 0 || ((uchar) *a == *b && mem_eq(a + 1, b + 1, n - 1));
-}
-constexpr bool mem_eq(const unsigned char *a, const char *b, std::size_t n) noexcept {
-    return n == 0 || (*a == (uchar) *b && mem_eq(a + 1, b + 1, n - 1));
-}
-
-constexpr void mem_set(char *p, char c, std::size_t n) noexcept {
-    (void) (n == 0 || (*p = c, mem_set(p + 1, c, n - 1), 0));
-}
-constexpr void mem_set(unsigned char *p, unsigned char c, std::size_t n) noexcept {
-    (void) (n == 0 || (*p = c, mem_set(p + 1, c, n - 1), 0));
-}
-forceinline constexpr void mem_clear(char *p, std::size_t n) noexcept { mem_set(p, (char) 0, n); }
-forceinline constexpr void mem_clear(unsigned char *p, std::size_t n) noexcept {
-    mem_set(p, (unsigned char) 0, n);
-}
-
-forceinline constexpr upx_uint16_t bswap16(upx_uint16_t v) noexcept {
-    typedef unsigned U;
-    return (upx_uint16_t) ((((U) v >> 8) & 0xff) | (((U) v & 0xff) << 8));
-}
-forceinline constexpr upx_uint32_t bswap32(upx_uint32_t v) noexcept {
-    typedef upx_uint32_t U;
-    return (upx_uint32_t) ((((U) v >> 24) & 0xff) | (((U) v >> 8) & 0xff00) |
-                           (((U) v & 0xff00) << 8) | (((U) v & 0xff) << 24));
-}
-forceinline constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept {
-    return (upx_uint64_t) (((upx_uint64_t) bswap32((upx_uint32_t) v) << 32) |
-                           bswap32((upx_uint32_t) (v >> 32)));
-}
-
-forceinline constexpr upx_uint16_t get_be16(const byte *p) noexcept {
-    typedef unsigned U;
-    return (upx_uint16_t) (((U) p[0] << 8) | ((U) p[1] << 0));
-}
-forceinline constexpr upx_uint32_t get_be24(const byte *p) noexcept {
-    typedef upx_uint32_t U;
-    return (upx_uint32_t) (((U) p[0] << 16) | ((U) p[1] << 8) | ((U) p[2] << 0));
-}
-forceinline constexpr upx_uint32_t get_be32(const byte *p) noexcept {
-    typedef upx_uint32_t U;
-    return (upx_uint32_t) (((U) p[0] << 24) | ((U) p[1] << 16) | ((U) p[2] << 8) | ((U) p[3] << 0));
-}
-forceinline constexpr upx_uint64_t get_be64(const byte *p) noexcept {
-    typedef upx_uint64_t U;
-    return (upx_uint64_t) (((U) p[0] << 56) | ((U) p[1] << 48) | ((U) p[2] << 40) |
-                           ((U) p[3] << 32) | ((U) p[4] << 24) | ((U) p[5] << 16) |
-                           ((U) p[6] << 8) | ((U) p[7] << 0));
-}
-
-forceinline constexpr void set_be16(byte *p, upx_uint16_t v) noexcept {
-    p[0] = (byte) ((v >> 8) & 0xff);
-    p[1] = (byte) ((v >> 0) & 0xff);
-}
-forceinline constexpr void set_be24(byte *p, upx_uint32_t v) noexcept {
-    p[0] = (byte) ((v >> 16) & 0xff);
-    p[1] = (byte) ((v >> 8) & 0xff);
-    p[2] = (byte) ((v >> 0) & 0xff);
-}
-forceinline constexpr void set_be32(byte *p, upx_uint32_t v) noexcept {
-    p[0] = (byte) ((v >> 24) & 0xff);
-    p[1] = (byte) ((v >> 16) & 0xff);
-    p[2] = (byte) ((v >> 8) & 0xff);
-    p[3] = (byte) ((v >> 0) & 0xff);
-}
-forceinline constexpr void set_be64(byte *p, upx_uint64_t v) noexcept {
-    p[0] = (byte) ((v >> 56) & 0xff);
-    p[1] = (byte) ((v >> 48) & 0xff);
-    p[2] = (byte) ((v >> 40) & 0xff);
-    p[3] = (byte) ((v >> 32) & 0xff);
-    p[4] = (byte) ((v >> 24) & 0xff);
-    p[5] = (byte) ((v >> 16) & 0xff);
-    p[6] = (byte) ((v >> 8) & 0xff);
-    p[7] = (byte) ((v >> 0) & 0xff);
-}
-
-forceinline constexpr upx_uint16_t get_le16(const byte *p) noexcept {
-    typedef unsigned U;
-    return (upx_uint16_t) (((U) p[0] << 0) | ((U) p[1] << 8));
-}
-forceinline constexpr upx_uint32_t get_le24(const byte *p) noexcept {
-    typedef upx_uint32_t U;
-    return (upx_uint32_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16));
-}
-forceinline constexpr upx_uint32_t get_le32(const byte *p) noexcept {
-    typedef upx_uint32_t U;
-    return (upx_uint32_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16) | ((U) p[3] << 24));
-}
-forceinline constexpr upx_uint64_t get_le64(const byte *p) noexcept {
-    typedef upx_uint64_t U;
-    return (upx_uint64_t) (((U) p[0] << 0) | ((U) p[1] << 8) | ((U) p[2] << 16) | ((U) p[3] << 24) |
-                           ((U) p[4] << 32) | ((U) p[5] << 40) | ((U) p[6] << 48) |
-                           ((U) p[7] << 56));
-}
-
-forceinline constexpr void set_le16(byte *p, upx_uint16_t v) noexcept {
-    p[0] = (byte) ((v >> 0) & 0xff);
-    p[1] = (byte) ((v >> 8) & 0xff);
-}
-forceinline constexpr void set_le24(byte *p, upx_uint32_t v) noexcept {
-    p[0] = (byte) ((v >> 0) & 0xff);
-    p[1] = (byte) ((v >> 8) & 0xff);
-    p[2] = (byte) ((v >> 16) & 0xff);
-}
-forceinline constexpr void set_le32(byte *p, upx_uint32_t v) noexcept {
-    p[0] = (byte) ((v >> 0) & 0xff);
-    p[1] = (byte) ((v >> 8) & 0xff);
-    p[2] = (byte) ((v >> 16) & 0xff);
-    p[3] = (byte) ((v >> 24) & 0xff);
-}
-forceinline constexpr void set_le64(byte *p, upx_uint64_t v) noexcept {
-    p[0] = (byte) ((v >> 0) & 0xff);
-    p[1] = (byte) ((v >> 8) & 0xff);
-    p[2] = (byte) ((v >> 16) & 0xff);
-    p[3] = (byte) ((v >> 24) & 0xff);
-    p[4] = (byte) ((v >> 32) & 0xff);
-    p[5] = (byte) ((v >> 40) & 0xff);
-    p[6] = (byte) ((v >> 48) & 0xff);
-    p[7] = (byte) ((v >> 56) & 0xff);
-}
-
-forceinline constexpr upx_uint16_t get_ne16(const byte *p) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    return get_be16(p);
-#else
-    return get_le16(p);
-#endif
-}
-forceinline constexpr upx_uint32_t get_ne24(const byte *p) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    return get_be24(p);
-#else
-    return get_le24(p);
-#endif
-}
-forceinline constexpr upx_uint32_t get_ne32(const byte *p) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    return get_be32(p);
-#else
-    return get_le32(p);
-#endif
-}
-forceinline constexpr upx_uint64_t get_ne64(const byte *p) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    return get_be64(p);
-#else
-    return get_le64(p);
-#endif
-}
-
-forceinline constexpr void set_ne16(byte *p, upx_uint16_t v) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    set_be16(p, v);
-#else
-    set_le16(p, v);
-#endif
-}
-forceinline constexpr void set_ne24(byte *p, upx_uint32_t v) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    set_be24(p, v);
-#else
-    set_le24(p, v);
-#endif
-}
-forceinline constexpr void set_ne32(byte *p, upx_uint32_t v) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    set_be32(p, v);
-#else
-    set_le32(p, v);
-#endif
-}
-forceinline constexpr void set_ne64(byte *p, upx_uint64_t v) noexcept {
-#if (ACC_ABI_BIG_ENDIAN)
-    set_be64(p, v);
-#else
-    set_le64(p, v);
-#endif
-}
-
-} // namespace compile_time
 
 /*************************************************************************
 // TriBool - tri-state bool
@@ -607,10 +620,10 @@ struct TriBool final {
     static constexpr bool is_third_true = IsThirdTrue;
     // types
     typedef T underlying_type;
-    static_assert(std::is_integral_v<underlying_type>);
     typedef decltype(T(0) + T(0)) promoted_type;
-    static_assert(std::is_integral_v<promoted_type>);
     enum value_type : underlying_type { False = 0, True = 1, Third = 2 };
+    static_assert(std::is_integral_v<underlying_type>);
+    static_assert(std::is_integral_v<promoted_type>);
     static_assert(sizeof(value_type) == sizeof(underlying_type));
     static_assert(sizeof(underlying_type) <= sizeof(promoted_type));
     // constructors
@@ -671,6 +684,8 @@ struct OptVar final {
     static constexpr T max_value = max_value_;
     static_assert(min_value <= default_value && default_value <= max_value);
 
+    explicit constexpr OptVar() noexcept {}
+
     // automatic conversion
     constexpr operator T() const noexcept { return value; }
 
@@ -682,7 +697,6 @@ struct OptVar final {
     }
     void assertValue() const noexcept { assertValue(value); }
 
-    constexpr OptVar() noexcept {}
     OptVar &operator=(const T &other) noexcept { // copy constructor
         assertValue(other);
         value = other;
@@ -780,6 +794,7 @@ template <class T>
 inline void owner_free(OwningPointer(T)(&object)) noexcept {
     static_assert(!std::is_class_v<T>); // UPX convention
     if (object != nullptr) {
+        // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
         ::free((T *) object); // free memory from malloc()
         object = nullptr;
     }

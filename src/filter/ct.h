@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -392,9 +392,9 @@ static int CTarm64(Filter *f, int dir) { // dir: 1, 0, -1
     byte *b = f->buf;                    // will be incremented
     byte *const b_end = b + f->buf_len - 4;
     do {
-        unsigned const a = b - f->buf;
-        int const d = dir * (f->addvalue + (a >> 2));
-        unsigned const v = get_le32(f->buf); // the 32-bit instruction
+        const unsigned a = b - f->buf;
+        const int d = dir * (f->addvalue + (a >> 2));
+        const unsigned v = get_le32(f->buf); // the 32-bit instruction
         if (0x05 == (0x1f & (v >> 26))) {    // b, bl
             f->lastcall = a;
             if (dir)

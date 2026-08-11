@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -49,6 +49,7 @@ Packer::Packer(InputFile *f) : PackerBase(f) { uip = new UiPacker(this); }
 Packer::~Packer() noexcept {
     upx::owner_delete(uip);
     upx::owner_delete(linker);
+    assert_noexcept(uip == nullptr);
     assert_noexcept(linker == nullptr);
 }
 
@@ -66,8 +67,7 @@ void Packer::assertPacker() const {
     if (bele == nullptr)
         fprintf(stderr, "%s\n", getName());
     assert(bele != nullptr);
-    if (getFormat() != UPX_F_MACH_FAT) // macho/fat is multiarch
-    {
+    if (getFormat() != UPX_F_MACH_FAT) { // macho/fat is multiarch
         const N_BELE_RTP::AbstractPolicy *format_bele;
         if (getFormat() < 128)
             format_bele = &N_BELE_RTP::le_policy;
@@ -84,6 +84,7 @@ void Packer::assertPacker() const {
     assert(bele == l->bele);
     delete l;
 #endif
+    assert_noexcept(isValidFormat(getFormat()));
 }
 
 /*************************************************************************
@@ -705,7 +706,7 @@ int Packer::patch_le32(void *b, int blen, const void *old, unsigned new_) {
 // loader util (interface to linker)
 **************************************************************************/
 
-static const char *getIdentstr(unsigned *size, int small) {
+static noinline const char *getIdentstr(unsigned *size, int small) {
     // IMPORTANT: we do NOT change "http://upx.sf.net"
     static char identbig[] =
         "\n\0"
@@ -757,14 +758,14 @@ static const char *getIdentstr(unsigned *size, int small) {
     }
 }
 
-void Packer::initLoader(const void *pdata, int plen, int small, int pextra) {
+void Packer::initLoader(unsigned arch, const void *pdata, int plen, int small, int pextra) {
     upx::owner_delete(linker);
     linker = newLinker();
     assert(bele == linker->bele);
-    linker->init(pdata, plen, pextra);
+    linker->init(arch, pdata, plen, pextra);
 
     unsigned size;
-    char const *const ident = getIdentstr(&size, small);
+    const char *const ident = getIdentstr(&size, small);
     linker->addSection("IDENTSTR", ident, size, 0);
 }
 
@@ -857,9 +858,9 @@ void Packer::relocateLoader() {
 }
 
 /*************************************************************************
-//      void Packer::compressWithFilters():
-// Try compression with several methods and filters, choose the best
-/  or first working one. Needs buildLoader().
+// void Packer::compressWithFilters():
+//   Try compression with several methods and filters, choose the best
+//   or first working one. Needs buildLoader().
 //
 // Required inputs:
 //   this->ph
@@ -936,7 +937,7 @@ int Packer::prepareMethods(int *methods, int ph_method, const int *all_methods) 
     return nmethods;
 }
 
-static int prepareFilters(int *filters, int &filter_strategy, const int *all_filters) {
+static noinline int prepareFilters(int *filters, int &filter_strategy, const int *all_filters) {
     int nfilters = 0;
 
     // setup filter filter_strategy
@@ -1015,9 +1016,9 @@ void Packer::compressWithFilters(byte *i_ptr,
                                  byte *const hdr_ptr, const unsigned hdr_len,
                                  Filter *const parm_ft, // updated
                                  const unsigned overlap_range,
-                                 upx_compress_config_t const *const cconf,
+                                 const upx_compress_config_t *const cconf,
                                  int filter_strategy, // in+out for prepareFilters
-                                 bool const inhibit_compression_check) {
+                                 const bool inhibit_compression_check) {
     parm_ft->buf_len = f_len;
     // struct copies
     const PackHeader orig_ph = this->ph;
@@ -1086,6 +1087,12 @@ void Packer::compressWithFilters(byte *i_ptr,
                 throwInternalError("header compression failed");
             if (hdr_c_len >= hdr_len)
                 throwInternalError("header compression size increase");
+            MemBuffer mb_uncLoader(10 + hdr_len);
+            unsigned unc_len = hdr_len;
+            r = upx_decompress(o_tmp, hdr_c_len, (unsigned char *) mb_uncLoader, &unc_len,
+                               methods[mm], nullptr);
+            if (r != UPX_E_OK)
+                throwInternalError("header compression failed");
         }
         int nfilters_success_mm = 0;
         for (int ff = 0; ff < nfilters; ff++) // for all filters
@@ -1219,7 +1226,7 @@ void Packer::compressWithFilters(Filter *ft, const unsigned overlap_range,
 }
 
 void Packer::compressWithFilters(Filter *ft, const unsigned overlap_range,
-                                 upx_compress_config_t const *cconf, int filter_strategy,
+                                 const upx_compress_config_t *cconf, int filter_strategy,
                                  unsigned filter_off, unsigned ibuf_off, unsigned obuf_off,
                                  byte *const hdr_ptr, unsigned hdr_len,
                                  bool inhibit_compression_check) {

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -205,7 +205,7 @@ protected:
     bool use_clear_dirty_stack = true;
     bool use_stub_relocs = true;
 
-    static unsigned virta2objnum(unsigned, SPAN_0(pe_section_t), unsigned);
+    static unsigned virta2objnum(unsigned, SPAN_0(const pe_section_t), unsigned);
     unsigned tryremove(unsigned, unsigned);
 
     enum {
@@ -519,6 +519,17 @@ protected:
         void build(char *base, unsigned newoffs);
         unsigned getsize() const { return size; }
     };
+
+    struct alignas(1) DebugDir final {
+        LE32 flags, date_time, version;
+        LE32 type;
+        LE32 size;
+        LE32 rva;
+        LE32 fpos;
+    };
+    enum { IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20 };
+    enum { IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT = 0x0001 };
+    struct DebugDir *dbgCET = nullptr;
 };
 
 class PeFile32 : public PeFile {

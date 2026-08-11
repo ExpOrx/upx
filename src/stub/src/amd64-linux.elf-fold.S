@@ -2,7 +2,7 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 2000-2025 John F. Reiser
+*  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,7 @@
 NBPW= 8
 #include "arch/amd64/macros.S"
 #include "arch/amd64/regs.h"
+#include "../../MAX_ELF_HDR.h"
 
 PATH_MAX= 4096  // /usr/include/linux/limits.h
 
@@ -46,8 +47,6 @@ MAP_FIXED=     0x10
 PROT_READ=     0x1
 
 O_RDONLY=       0
-
-OVERHEAD=2048
 
 /* 64-bit mode only! */
 __NR_read=  0
@@ -81,6 +80,7 @@ is_ptinterp=     (1<<0)
 
         .balign 8
 PAGE_MASK: .quad -1<<12  // default
+cancel_sigsegv: .quad 0  // subroutine that cancels sigaction(SIGSEGV,)
 
 // IN: [ADRX,+LENX): compressed data; [ADRU,+LENU): expanded fold (w/ upx_main2)
 // %rsp= %rbp= &F_ADRX; %r13= O_BINFO | is_ptinterp | unmap_all_pages
@@ -161,7 +161,7 @@ no_env_pse:
         or  %rax,%arg4  # transfer is_ptinterp to &new_ELF64_auxv
         sub %rax,%arg5  # and clear from  ELFA
         mov %arg5,%r13  # save ELFA
-        subq $ OVERHEAD,%rsp
+        subq $ MAX_ELF_HDR_64,%rsp
         movq %rsp,%arg3  # &ELf64_Ehdr temporary space
         call upx_main2  # Out: %rax= entry
 /* entry= upx_main2(
@@ -172,10 +172,13 @@ no_env_pse:
    Elf64_Addr elfaddr  {%r8}
    )
 */
-// rsp/ {OVERHEAD},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
-        addq $OVERHEAD,%rsp  # Elf64_Ehdr temporary space
-        mov       %ebp,%ebx  # fd
+// rsp/ {MAX_ELF_HDR_64},ADRU,LENU,rdx,%entry,  argc,argv,0,envp,0,auxv,0,strings
+        addq $MAX_ELF_HDR_64,%rsp  # Elf64_Ehdr temporary space
+#define r_fd  ebx
+        mov       %ebp,%r_fd
         movq %rax,3*NBPW(%rsp)  # entry
+
+        call *cancel_sigsegv(%rip)
 
 sz_Ehdr= 8*NBPW
 e_type= 16
@@ -185,21 +188,21 @@ p_memsz= 5*NBPW
 // Discard pages of compressed data (includes [ADRX,+LENX) )
         movq p_memsz+sz_Phdr+sz_Ehdr(%r13),%arg2  #   Phdr[C_TEXT= 1].p_memsz
         //cmpw $ET_EXEC, e_type(%r13); jne 1f
-        movq %r13,%arg1; call brk  // also sets the brk
+        //movq %r13,%arg1; call brk  // also sets the brk
 1:
         movq %r13,%arg1; call munmap  # discard C_TEXT compressed data
 
 // Map 1 page of /proc/self/exe so that the symlink does not disappear.
-        test %ebx,%ebx; js no_pse_map
+        test %r_fd,%r_fd; js no_pse_map
         subq %arg6,%arg6  # 0 offset
-        mov %ebx,%arg5l  # fd
+        mov %r_fd,%arg5l  # fd
         push $MAP_PRIVATE; pop %arg4
         push $PROT_READ; pop %arg3
         mov $1<<12,%arg2l
         subl %arg1l,%arg1l  # 0
         call mmap
 
-        mov %ebx,%edi  # fd
+        mov %r_fd,%edi  # fd
         call close
 
 .macro NOTRACK

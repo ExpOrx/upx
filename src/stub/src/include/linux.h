@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -379,9 +379,6 @@ static inline _syscall2(int,link,const char *,src, const char *,dst)
 #undef Z0
 #undef Z1
 
-#elif defined(__mips__)  /*}{*/
-  #undef  MAP_ANONYMOUS
-  #define MAP_ANONYMOUS 0x800
 #else  /*}{ generic */
 
 void *brk(void *);
@@ -403,6 +400,10 @@ ssize_t write(int, void const *, size_t);
 void __clear_cache(void *, void *);
 void *mmap(void *, size_t, int, int, int, off_t);
 
+#if defined(__mips__)  /*}{*/
+  #undef  MAP_ANONYMOUS
+  #define MAP_ANONYMOUS 0x800
+#endif  //}
 
 /*************************************************************************
 // <elf.h>

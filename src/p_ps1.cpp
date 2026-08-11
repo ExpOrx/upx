@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2002-2025 Jens Medoch
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) Jens Medoch
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -34,6 +34,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_ps1.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -238,8 +240,8 @@ tribool PackPs1::canPack() {
         }
     if (!checkFileHeader())
         throwCantPack("unsupported header flags (try --force)");
-    if (!opt->force && file_size < PS_MIN_SIZE)
-        throwCantPack("file is too small (try --force)");
+    if (file_size < PS_MIN_SIZE)
+        throwCantPack("file is too small");
     if (!opt->force && file_size_u > PS_MAX_SIZE)
         throwCantPack("file is too big (try --force)");
     return true;
@@ -282,23 +284,24 @@ void PackPs1::buildLoader(const Filter *) {
         foundBss = findBssSection();
 
     if (M_IS_LZMA(ph.method) && !buildPart2) {
-        initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
+        initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
         addLoader("decompressor.start", isCon ? "LZMA_DEC20" : "LZMA_DEC10", "lzma.init", nullptr);
         addLoader(sa_tmp > (0x10000 << 2) ? "memset.long" : "memset.short",
                   !foundBss ? "con.exit" : "bss.exit", nullptr);
     } else {
         if (M_IS_LZMA(ph.method) && buildPart2) {
             sz_lcpr = MemBuffer::getSizeForCompression(sz_lunc);
-            byte *cprLoader = New(byte, sz_lcpr); // FIXME: does this leak? => should put into class
-            int r = upx_compress(getLoader(), sz_lunc, cprLoader, &sz_lcpr, nullptr, M_NRV2B_8, 10,
-                                 nullptr, nullptr);
+            mb_cprLoader.dealloc();
+            mb_cprLoader.alloc(sz_lcpr);
+            int r = upx_compress(getLoader(), sz_lunc, mb_cprLoader, &sz_lcpr, nullptr, M_NRV2B_8,
+                                 10, nullptr, nullptr);
             if (r != UPX_E_OK || sz_lcpr >= sz_lunc)
                 throwInternalError("loader compression failed");
-            initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1),
+            initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1),
                        isCon || !M_IS_LZMA(ph.method) ? 0 : 1);
-            linker->addSection("lzma.exec", cprLoader, sz_lcpr, 0);
+            linker->addSection("lzma.exec", mb_cprLoader, sz_lcpr, 0);
         } else
-            initLoader(stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
+            initLoader(EM_MIPS_RS3_LE, stub_mipsel_r3000_ps1, sizeof(stub_mipsel_r3000_ps1));
 
         pad_code = ALIGN_UP_GAP((ph.c_len + (isCon ? sz_lcpr : 0)), 4u);
         assert(pad_code < 4);
@@ -359,11 +362,11 @@ bool PackPs1::findBssSection() {
     byte reg;
     const LE32 *const p1 = ACC_CCAST(const LE32 *, ibuf + (ih.epc - ih.tx_ptr));
 
-    if ((ih.epc - ih.tx_ptr + (BSS_CHK_LIMIT * 4)) > fdata_size)
+    if ((ih.epc - ih.tx_ptr + (BSS_CHK_LIMIT * 4) + sizeof(bss_nfo)) > fdata_size)
         return false;
 
     // check 18 opcodes for sw zero,0(x)
-    for (signed i = BSS_CHK_LIMIT; i >= 0; i--) {
+    for (int i = BSS_CHK_LIMIT; i >= 0; i--) {
         upx_uint16_t op = p1[i] >> 16;
         if (IS_SW_ZERO(op)) {
             // found! get reg (x) for bss_start
@@ -599,7 +602,7 @@ void PackPs1::pack(OutputFile *fo) {
                 i = 4;
         }
     }
-    const char *loader_method[] = {"con/stack", "con/bss", "cdb", "cdb/stack", "cdb/bss"};
+    const char *const loader_method[] = {"con/stack", "con/bss", "cdb", "cdb/stack", "cdb/bss"};
     char method_name[32 + 1];
     set_method_name(method_name, sizeof(method_name), ph.method, ph.level);
     printf("%-13s: methods       : %s, %s\n", getName(), method_name, loader_method[i]);

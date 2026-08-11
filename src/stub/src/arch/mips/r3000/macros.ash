@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UCL data compression library.
 ;
-;  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
 ;  All Rights Reserved.
 ;
 ;  The UCL library is free software; you can redistribute it and/or
@@ -37,6 +37,11 @@
         .section \name,"ax"
         .align  0
 .endm
+
+//.macro do_sys NR
+//        li v0,\NR
+//        syscall
+//.endm
 
 /* http://math-atlas.sourceforge.net/devel/assembly/mipsabi32.pdf
  *   When calling position independent functions $25 must contain
@@ -131,6 +136,11 @@
     lw \p2,1*NBPW(sp)
     lw \p3,2*NBPW(sp)
     addiu sp,3*NBPW
+.endm
+.macro PUSH2 p1,p2
+    addiu sp,-2*NBPW
+    sw \p1,0*NBPW(sp)
+    sw \p2,1*NBPW(sp)
 .endm
 .macro POP2 p1,p2
     lw \p1,0*NBPW(sp)

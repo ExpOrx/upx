@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -68,7 +68,9 @@
 #endif
 #endif
 
+// NOLINTBEGIN(bugprone-unintended-char-ostream-output)
 #include <doctest/doctest/parts/doctest.cpp>
+// NOLINTEND(bugprone-unintended-char-ostream-output)
 
 #endif // DOCTEST_CONFIG_DISABLE
 

@@ -244,7 +244,7 @@ function(upx_cache_bool_vars) # ARGV
     set(default_value "${ARGV0}")
     list(REMOVE_AT ARGV 0)
     foreach(var_name ${ARGV})
-        set(value ${default_value})
+        set(value "${default_value}")
         if(DEFINED UPX_CACHE_VALUE_${var_name})     # check cache
             set(value "${UPX_CACHE_VALUE_${var_name}}")
         elseif(DEFINED ${var_name})                 # defined via "cmake -DXXX=YYY"
@@ -334,6 +334,7 @@ function(upx_add_target_extra_compile_options) # ARGV
         if(NOT DEFINED ${var_name})
         elseif(",${${var_name}}," STREQUAL ",,")
         else()
+            upx_print_var(${var_name})
             set(flags "${${var_name}}")
             if(NOT flags MATCHES ";") # NOTE: split into list from string only if not already a list
                 if(${CMAKE_VERSION} VERSION_GREATER "3.8.99")
@@ -341,6 +342,7 @@ function(upx_add_target_extra_compile_options) # ARGV
                 else()
                     separate_arguments(flags)
                 endif()
+                upx_print_var(flags)
             endif()
             target_compile_options(${t} PRIVATE "${flags}")
         endif()
@@ -403,7 +405,7 @@ function(upx_sanitize_target) # ARGV
             # MSVC uses -GS (similar to -fstack-protector) by default
         elseif(NOT GNU_FRONTEND)
             # unknown compiler
-        elseif(MINGW OR CYGWIN)
+        elseif(WIN32 OR MINGW OR CYGWIN)
             # avoid link errors with current MinGW-w64 versions
             # see https://www.mingw-w64.org/contribute/#sanitizers-asan-tsan-usan
         elseif(CMAKE_C_COMPILER_ID MATCHES "^Clang$" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "9.0")

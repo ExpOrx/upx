@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2025 Laszlo Molnar
-*  Copyright (C) 2000-2025 John F. Reiser
+*  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) Laszlo Molnar
+*  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -94,7 +94,212 @@ _start: .globl _start
         push %rsp; pop %rdi  // argv
         push %rcx  // argc
         push %rdx  // param for atexit()
+        lea cancel_dummy(%rip),%r15
 
+  section ELFSIGSEGV
+// install SIGSEGV handler for debugging
+SIGSEGV= 11
+SA_SIGINFO= 4  // /usr/include/bits/sigaction.h
+SA_RESTORER= 0x04000000
+__NR_rt_sigaction= 13  // /usr/include/asm/unistd_64.h
+        push %rdi  // save reg
+        sub %edx,%edx  // arg3= 0 ==> do not save old sigaction
+        push %rdx  // .sa_mask: 64 bits (8 bytes) of flags for signals
+        lea __restore_rt(%rip),%rax; push %rax  // .sa_restorer
+        push $SA_RESTORER | SA_SIGINFO  // .sa_flags
+        lea sigsegv_sigaction(%rip),%rax; push %rax  // .sa_sigaction
+        lea cancel_sigsegv(%rip),%r15
+        push %rsp; pop %rsi  // arg2= &new struct sigaction
+        push $SIGSEGV; pop %rdi  // arg1= signum
+        push $8; pop %r10  // sys4= sizeof(__sigset_t) ==> 64 bits
+        push $__NR_rt_sigaction; pop %rax; syscall
+        add $(3 + 1) * NBPW,%rsp  // toss struct sigaction
+        pop %rdi  // restore reg
+
+#if 0  //{ TEST ONLY
+    movl $0x18181818,%r8d
+    movl $0x19191919,%r9d
+    movl $0x1a1a1a1a,%r10d
+    movl $0x1b1b1b1b,%r11d
+    movl $0x1c1c1c1c,%r12d
+    movl $0x1d1d1d1d,%r13d
+    movl $0x1e1e1e1e,%r14d
+    movl $0x1f1f1f1f,%r15d
+    movl $0xaaaaaaaa,%eax
+    movl $0xbbbbbbbb,%ebx
+    movl $0xcccccccc,%ecx
+    movl $0xdddddddd,%edx
+    movl $0x55555555,%ebp
+    movl $0x66666666,%esi
+    movl $0x77777777,%edi
+    movl (%rdx),%edx  // force SIGSEGV
+#endif  // TEST_ONLY}
+
+    jmp end_sigsegv
+
+__NR_rt_sigreturn= 15
+__restore_rt:
+        endbr64
+        mov $__NR_rt_sigreturn,%eax
+        syscall
+
+sigsegv_sigaction:
+        endbr64
+        push %rdx  // save &ucontext_t
+
+// print /proc/self/maps of child (same as parent: the beauty of fork())
+        mov $end_announce_sigaction - announce_sigaction,%edx  // arg3 len
+        lea announce_sigaction(%rip),%rsi  // arg2 buf
+        push $2; pop %rdi  // arg1 fd_stderr
+        push $__NR_write; pop %rax; syscall  // ignore error on write()
+
+        xor %esi,%esi  // arg2 O_RDONLY
+        lea proc_self_maps(%rip),%arg1
+        push $__NR_open; pop %rax; syscall
+        mov %rax,%r12  // fd_maps
+BUFLEN= 4096
+        mov $BUFLEN,%ebx; sub %rbx,%rsp  // allocate buffer
+loop_maps:
+        mov %ebx,%edx  // arg3 buflen
+        push %rsp; pop %rsi  // arg2 buffer
+        mov %r12,%rdi  // arg1 fd_maps
+        xor %eax,%eax; syscall  // __NR_read
+        test %eax,%eax; jle done_maps  // ignore error on read()
+        mov %eax,%edx  // arg3 buflen
+        push %rsp; pop %rsi  // arg2 buf
+        push $2; pop %rdi  // arg1 fd_stderr
+        push $__NR_write; pop %rax; syscall  // ignore error on write()
+        jmp loop_maps
+done_maps:
+        mov %r12,%rdi  //arg1 fd_maps
+        add %rbx,%rsp  // discard buffer
+        push $__NR_close; pop %rax; syscall
+// end printing of /proc/self/maps
+
+        pop %rdx  // restore &ucontext_t
+__NR_fork= 57
+        push $__NR_fork; pop %rax; call sys_check
+        test %eax,%eax; je child
+parent:
+        jmp parent  // spin; paused by gdb
+
+proc_self_cmdline:
+        .asciz "/proc/self/cmdline"
+announce_sigaction:
+        .asciz "\n\nSIGSEGV address space:\n"
+end_announce_sigaction:
+
+proc_self_maps:
+        .asciz "/proc/self/maps"
+minus_q:
+        .asciz "-q"
+path_gdb:
+        .asciz "/usr/bin/gdb"
+commands_gdb:
+        .ascii "set prompt\n"  // null string prompt
+        .ascii "info inferiors\n"
+// ucontext_t, mcontext_t, gregset_t, gret_t, REG_xxx:   <sys/ucontext.h>
+// stack_t  <bits/types/stack_t.h>
+        .ascii "print \"r8 - r15\"\n"
+        .ascii "x/8xg $rdx + 5*8\n"
+
+        .ascii "print \"rdi, rsi, rbp, rbx\"\n"
+        .ascii "x/4xg\n"
+        .ascii "print \"rdx, rax, rcx, rsp\"\n"
+        .ascii "x/4xg\n"
+        .ascii "print \"rip, efl\"\n"
+        .ascii "x/2xg\n"
+
+        .ascii "set $pc = *(long *)($rdx + 168)\n"
+        .ascii "print \"faulting instr\"\n"
+        .ascii "x/i $pc\n"
+        .ascii "print \"fault context\"\n"
+        .ascii "x/16i $pc - 0x20\n"
+
+        .ascii "print \"user stack\"\n"
+        .ascii "x/64xg *(long *)($rdx + 5*8 + 15*8)\n"
+
+        .ascii "kill\n"
+        .ascii "quit 1"
+        .byte 0
+commands_gdb_end:
+
+child:
+PATH_MAX= 4096
+        sub $PATH_MAX,%rsp
+        lea proc_self_cmdline(%rip),%arg1
+O_RDONLY= 0
+        push $O_RDONLY; pop %arg2
+        push $__NR_open; pop %rax; call sys_check
+        push %rax; pop %arg1  // fd
+        push %rsp; pop %arg2  // buffer
+        push $PATH_MAX; pop %arg3
+__NR_read= 0
+        push $__NR_read; pop %rax; call sys_check
+        push $__NR_close; pop %rax; call sys_check
+
+__NR_getppid= 110
+        push $__NR_getppid; pop %rax; syscall
+        push %rax; pop %rsi
+        xor %eax,%eax; push %rax; push %rax  // decimal(pid) fits in 16 bytes
+        push %rsp; pop %rdi; call unsimal
+// argv
+        push %rsp; pop %rsi  // fence post: &pid.unsimal
+        push $0  // argv[4]
+        push %rsi  // arg3 pid
+        add $16,%rsi; push %rsi  // arg2 exename
+        lea minus_q(%rip),%rax; push %rax  // arg1 "-q"
+        add $(path_gdb - minus_q),%rax; push %rax  // arg[0] "/usr/bin/gdb"
+
+#if 1  //{ pipe input to gdb
+        xor %edi,%edi; push $__NR_close; pop %rax; syscall
+        push %rax; push %rsp; pop %rdi  // &fd_pipe[2]; 4 bytes each
+__NR_pipe= 22
+        push $__NR_pipe; pop %rax; call sys_check
+        pop %rdi; shr $32,%rdi  // arg1  write side of pipe
+
+        push $commands_gdb_end - commands_gdb; pop %arg3
+        lea commands_gdb(%rip),%arg2
+__NR_write= 1
+        push $__NR_write; pop %rax; call sys_check
+        push $__NR_close; pop %rax; syscall
+#endif  //}
+
+        push $0; pop %arg3  // _environ  BUG
+        push %rsp; pop %arg2  // argv
+        movq (%arg2),%arg1  // "/usr/bin/gdb"
+__NR_execve= 59
+        push $__NR_execve; pop %rax; call sys_check
+        hlt
+
+unsimal:  // (dst, value)
+        push $10; pop %rcx  // radix
+        mov %esi,%eax  // value
+        call 0f
+        movb $0,(%rdi)  // terminator
+        ret
+0:
+        xor %edx,%edx; div %ecx; push %rdx  // eax= quo(%edx:%eax / %ecx); edx= rem
+        // 'div' undefines all flags!
+        test %eax,%eax; je 1f; call 0b
+1:
+        pop %rax; add $'0',%eax
+        stosb
+        ret
+
+// Uninstall SIGSEGV handler
+cancel_sigsegv:
+        endbr64
+        push $8; pop %sys4  // sys_arg4 minimal byte count
+        xor %edx,%edx  // no old
+        xor %esi,%esi  // no new
+        push $SIGSEGV; pop %rdi
+        push $__NR_rt_sigaction; pop %eax; syscall
+        ret
+
+end_sigsegv:
+
+  section ELFMAINX2
 #define old_sp %rbp
 F_FRAME= 7*NBPW
 F_ENTR= 6*NBPW; F_PMASK= F_ENTR
@@ -105,8 +310,9 @@ F_ELFA= 2*NBPW
 F_LENX= 1*NBPW
 F_ADRX= 0*NBPW
 
-D_FOLD=  1*NBPW  // .data space at start of unfold
+D_FOLD=  2*NBPW  // .data space at start of unfold
 D_PMASK= 0*NBPW
+D_XSIGSEGV= 1*NBPW
 
 // find auxv
         xor %eax,%eax  // 0
@@ -153,7 +359,7 @@ ok_memfd:
 
         lea sz_pack2(%rip),%rdi
         mov (%rdi),%ecx  // sz_pack2: length before stub
-        sub %rcx,%rdi  // elfaddr
+        sub %rcx,%rdi  // &Ehdr inside PT_LOAD[1]
         lea o_binfo(%rip),%rsi
         lodsl; xchg %eax,%ebx; mov %ebx,%r13d  // O_BINFO; advance to &b_info
 INSURANCE= 0x10
@@ -264,6 +470,7 @@ eof_n2b:
 
 // Write de-compressed 'fold' to file
         mov F_PMASK(old_sp),%rax; mov %rax,/*D_PMASK*/(%rsp)  // propagate PAGE_MASK
+        mov %r15,D_XSIGSEGV(%rsp)  // propagate cancel_sigsegv
         mov F_LENU(old_sp),%arg3  // LENU
         sub $INSURANCE,%arg3  // memcheck limit
         push %rsp; pop %arg2  // buffer
@@ -294,6 +501,10 @@ eof_n2b:
         pop %rax  // MATCH_12  ADRU
         add $D_FOLD,%rax  // beyond .data
         jmp *%rax  // goto unfolded stub
+
+cancel_dummy:
+        endbr64
+        ret
 
 sys_check:
         push %rax  // save __NR_ for debug

@@ -2,7 +2,7 @@
 @
 @  This file is part of the UPX executable compressor.
 @
-@  Copyright (C) 2000-2025 John F. Reiser
+@  Copyright (C) John F. Reiser
 @  All Rights Reserved.
 @
 @  UPX and the UCL library are free software; you can redistribute them
@@ -29,7 +29,7 @@
 
 #define ARM_OLDABI 1
 #include "arch/arm/v4a/macros.S"
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 __NR_SYSCALL_BASE = 0
 __ARM_NR_BASE= 0xf0000 + __NR_SYSCALL_BASE
 __ARM_NR_cacheflush = 2 + __ARM_NR_BASE
@@ -70,7 +70,6 @@ PATH_MAX= 4096
 #define TRACE_REGS r0-r12,r14,r15
 #endif  /*}*/
 
-#define OVERHEAD 2048
 #define call bl
 
 mflg_data: .int MAP_PRIVATE|MAP_ANONYMOUS  @ overwritten for QNX vs Linux

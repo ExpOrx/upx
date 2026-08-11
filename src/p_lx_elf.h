@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -29,10 +29,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_ELF_H  //{
-#define __UPX_P_LX_ELF_H 1
 
 typedef upx_uint32_t u32_t;  // easier to type; more narrow
 typedef upx_uint64_t u64_t;  // easier to type; more narrow
@@ -152,7 +149,6 @@ protected:
     // These ARM routines are essentially common to big/little endian,
     // but the class hierarchy splits after this class.
     virtual void ARM_defineSymbols(Filter const *ft);
-    virtual void ARM_updateLoader(OutputFile *);
     virtual int  ARM_is_QNX(void);
 
     virtual upx_uint64_t canPack_Shdr(Elf32_Phdr const *pload_x0);
@@ -550,6 +546,22 @@ protected:
     virtual void defineSymbols(Filter const *) override;
 };
 
+class PackLinuxElf64riscv64 : public PackLinuxElf64Le
+{
+    typedef PackLinuxElf64Le super;
+public:
+    PackLinuxElf64riscv64(InputFile *f);
+    virtual ~PackLinuxElf64riscv64();
+    virtual int getFormat() const override { return UPX_F_LINUX_ELF64_RISCV64; }
+    virtual const char *getName() const override { return "linux/riscv64"; }
+    virtual const char *getFullName(const options_t *) const override { return "riscv64-linux.elf"; }
+    virtual const int *getFilters() const override;
+protected:
+    virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
+    virtual void buildLoader(const Filter *) override;
+    virtual Linker* newLinker() const override;
+    virtual void defineSymbols(Filter const *) override;
+};
 
 /*************************************************************************
 // linux/elf32ppc
@@ -723,7 +735,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -743,7 +754,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -762,7 +772,6 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
 
@@ -781,11 +790,7 @@ protected:
     virtual Linker* newLinker() const override;
     virtual void pack1(OutputFile *, Filter &) override;  // generate executable header
     virtual void buildLoader(const Filter *) override;
-    virtual void updateLoader(OutputFile *) override;
     virtual void defineSymbols(Filter const *) override;
 };
-
-
-#endif /*} already included */
 
 /* vim:set ts=4 sw=4 et: */

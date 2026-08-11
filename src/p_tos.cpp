@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,6 +33,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_tos.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -94,7 +96,7 @@ unsigned PackTos::getDecomprOffset(int method, int small) const {
 void PackTos::buildLoader(const Filter *ft) {
     assert(ft->id == 0);
 
-    initLoader(stub_m68k_atari_tos, sizeof(stub_m68k_atari_tos));
+    initLoader(0, stub_m68k_atari_tos, sizeof(stub_m68k_atari_tos));
     // linker->dumpSymbols();
 
     //
@@ -323,8 +325,7 @@ static bool check_relocs(const byte *relocs, unsigned rsize, unsigned image_size
             fixup += 254;
         else if (c & 1) // must be word-aligned
             return false;
-        else // next reloc is here
-        {
+        else { // next reloc is here
             fixup += c;
             if (fixup - last_fixup < 4) // overlapping relocation
                 return false;
@@ -702,6 +703,10 @@ void PackTos::unpack(OutputFile *fo) {
     // decompress
     decompress(ibuf, obuf);
 
+    // the trailing FH_SIZE bytes hold the original file header
+    if (ph.u_len < FH_SIZE)
+        throwCantUnpack("file damaged");
+
     // write original header & decompressed file
     if (fo) {
         unsigned overlay = file_size_u - (FH_SIZE + ih.fh_text + ih.fh_data);
@@ -709,8 +714,8 @@ void PackTos::unpack(OutputFile *fo) {
             overlay -= 4; // this is our empty fixup
         checkOverlay(overlay);
 
-        fo->write(obuf + ph.u_len - FH_SIZE, FH_SIZE); // orig. file_hdr
-        fo->write(obuf, ph.u_len - FH_SIZE);           // orig. text+data+relocs
+        fo->write(obuf + (ph.u_len - FH_SIZE), FH_SIZE); // orig. file_hdr
+        fo->write(obuf, ph.u_len - FH_SIZE);             // orig. text+data+relocs
 
         // copy any overlay
         copyOverlay(fo, overlay, obuf);

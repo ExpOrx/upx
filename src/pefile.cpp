@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,7 +33,6 @@
 #include "linker.h"
 
 #define FILLVAL 0
-#define import  my_import // "import" is a keyword since C++20
 
 /*************************************************************************
 //
@@ -44,11 +43,12 @@
 #define IPTR_VAR_OFFSET(type, var, offset)                                                         \
     SPAN_S_VAR(type, var, ibuf + (offset), ibuf.getSize() - (offset), ibuf + (offset))
 
-static void xcheck(const void *p) {
+static void xcheck(const void *p) may_throw {
     if very_unlikely (p == nullptr)
         throwCantUnpack("xcheck unexpected nullptr pointer; take care!");
 }
-static void xcheck(const void *p, size_t plen, const void *b, size_t blen) {
+static void xcheck_noexcept(const void *p) noexcept { assert_noexcept(p != nullptr); }
+static void xcheck(const void *p, size_t plen, const void *b, size_t blen) may_throw {
     const charptr pp = (const charptr) p;
     const charptr bb = (const charptr) b;
     if very_unlikely (pp < bb || pp > bb + blen || pp + plen > bb + blen)
@@ -70,8 +70,10 @@ static void xcheck(const void *p, size_t plen, const void *b, size_t blen) {
 PeFile::PeFile(InputFile *f) : super(f) {
     bele = &N_BELE_RTP::le_policy;
     COMPILE_TIME_ASSERT(sizeof(ddirs_t) == 8)
+    COMPILE_TIME_ASSERT(sizeof(import_desc) == 20)
     COMPILE_TIME_ASSERT(sizeof(pe_section_t) == 40)
     COMPILE_TIME_ASSERT_ALIGNED1(ddirs_t)
+    COMPILE_TIME_ASSERT_ALIGNED1(import_desc)
     COMPILE_TIME_ASSERT_ALIGNED1(pe_section_t)
     COMPILE_TIME_ASSERT(RT_LAST == TABLESIZE(opt->win32_pe.compress_rt))
 
@@ -96,6 +98,7 @@ PeFile::PeFile(InputFile *f) : super(f) {
     use_tls_callbacks = false;
     oloadconf = nullptr;
     soloadconf = 0;
+    dbgCET = nullptr;
 
     isdll = false;
     isrtm = false;
@@ -134,8 +137,6 @@ bool PeFile::testUnpackVersion(int version) const {
     // known but not (yet?) supported
     if (cpu == IMAGE_FILE_MACHINE_ARMNT)
         throwCantPack("win32/armnt is not supported"); // obsolete
-    if (cpu == IMAGE_FILE_MACHINE_ARM64)
-        throwCantPack("win64/arm64 is not yet supported");
     // FIXME: it seems that arm64ec actually uses MACHINE_AMD64 ???
     if (cpu == IMAGE_FILE_MACHINE_ARM64EC)
         throwCantPack("win64/arm64ec is not yet supported");
@@ -143,6 +144,8 @@ bool PeFile::testUnpackVersion(int version) const {
     // supported
     if (cpu == IMAGE_FILE_MACHINE_AMD64)
         return UPX_F_W64PE_AMD64;
+    if (cpu == IMAGE_FILE_MACHINE_ARM64)
+        return UPX_F_W64PE_ARM64;
     if (cpu == IMAGE_FILE_MACHINE_ARM || cpu == IMAGE_FILE_MACHINE_THUMB)
         return UPX_F_WINCE_ARM;
     if (cpu >= IMAGE_FILE_MACHINE_I386 && cpu <= 0x150) // what is this 0x150 ???
@@ -234,8 +237,8 @@ int __acc_cdecl_qsort PeFile::Interval::compare(const void *p1, const void *p2) 
 void PeFile::Interval::add_interval(unsigned start, unsigned len) {
     if (ivnum == ivcapacity) {
         ivcapacity += 15;
-        ivarr = (interval *) realloc(ivarr, mem_size(sizeof(interval), ivcapacity));
-        assert(ivarr != nullptr);
+        ivarr = (interval *) ::realloc(ivarr, mem_size(sizeof(interval), ivcapacity));
+        assert_noexcept(ivarr != nullptr);
     }
     ivarr[ivnum].start = start;
     ivarr[ivnum].len = len;
@@ -349,7 +352,7 @@ PeFile::Reloc::Reloc(unsigned relocnum) {
 }
 
 void PeFile::Reloc::initSpans() {
-    start_buf = SPAN_0_MAKE(byte, start, start_size_in_bytes); // => now a SPAN_S
+    start_buf = SPAN_S_MAKE(byte, start, start_size_in_bytes); // => now is a SPAN_S
     rb.rel = SPAN_TYPE_CAST(BaseReloc, start_buf);             // SPAN_0
     rb.rel1 = SPAN_TYPE_CAST(LE16, start_buf);                 // SPAN_0
     rb.reset();
@@ -498,8 +501,7 @@ void PeFile::Reloc::finish(byte *(&result_ptr), unsigned &result_size) {
 #endif
 }
 
-void PeFile32::processRelocs() // pass1
-{
+void PeFile32::processRelocs() { // pass1
     big_relocs = 0;
 
     const unsigned skip1 = IDADDR(PEDIR_BASERELOC);
@@ -516,11 +518,20 @@ void PeFile32::processRelocs() // pass1
     if (opt->win32_pe.strip_relocs || relocnum == 0) {
         if (IDSIZE(PEDIR_BASERELOC)) {
             ibuf.fill(IDADDR(PEDIR_BASERELOC), IDSIZE(PEDIR_BASERELOC), FILLVAL);
+            const unsigned old_objs = ih.objects;
             ih.objects = tryremove(IDADDR(PEDIR_BASERELOC), ih.objects);
+            if (old_objs != ih.objects && 1) { // was removed
+                IDADDR(PEDIR_BASERELOC) = 0;
+                IDSIZE(PEDIR_BASERELOC) = 0;
+                const unsigned oam1 = ih.objectalign - 1;
+                ih.imagesize =
+                    (isection[-1 + ih.objects].vsize + isection[-1 + ih.objects].vaddr + oam1) &
+                    ~oam1;
+            }
         }
         mb_orelocs.alloc(1);
         mb_orelocs.clear();
-        orelocs = mb_orelocs; // => orelocs now is a SPAN_S
+        orelocs = SPAN_S_MAKE(byte, mb_orelocs); // => orelocs now is a SPAN_S
         sorelocs = 0;
         return;
     }
@@ -529,14 +540,14 @@ void PeFile32::processRelocs() // pass1
         if (counts[ic])
             infoWarning("skipping unsupported relocation type %d (%d)", ic, counts[ic]);
 
-    LE32 *fix[4];
+    LE32 *fix[4] = {};
     auto fix_deleter = upx::ArrayDeleter(fix, 0); // don't leak memory
     for (unsigned ic = 0; ic <= IMAGE_REL_BASED_HIGHLOW; ic++) {
         fix[ic] = New(LE32, counts[ic]);
         fix_deleter.count += 1;
     }
 
-    unsigned xcounts[4];
+    unsigned xcounts[4] = {};
     memset(xcounts, 0, sizeof(xcounts));
 
     // prepare sorting
@@ -572,7 +583,7 @@ void PeFile32::processRelocs() // pass1
 
     ibuf.fill(IDADDR(PEDIR_BASERELOC), IDSIZE(PEDIR_BASERELOC), FILLVAL);
     mb_orelocs.alloc(mem_size(4, relocnum, 8192)); // 8192 - safety
-    orelocs = mb_orelocs;                          // => orelocs now is a SPAN_S
+    orelocs = SPAN_S_MAKE(byte, mb_orelocs);       // => orelocs now is a SPAN_S
     sorelocs = optimizeReloc(xcounts[3], (byte *) fix[3], orelocs, ibuf + rvamin, ibufgood - rvamin,
                              32, true, &big_relocs);
 
@@ -601,8 +612,7 @@ void PeFile32::processRelocs() // pass1
 }
 
 // FIXME - this is too similar to PeFile32::processRelocs
-void PeFile64::processRelocs() // pass1
-{
+void PeFile64::processRelocs() { // pass1
     big_relocs = 0;
 
     const unsigned skip1 = IDADDR(PEDIR_BASERELOC);
@@ -619,11 +629,20 @@ void PeFile64::processRelocs() // pass1
     if (opt->win32_pe.strip_relocs || relocnum == 0) {
         if (IDSIZE(PEDIR_BASERELOC)) {
             ibuf.fill(IDADDR(PEDIR_BASERELOC), IDSIZE(PEDIR_BASERELOC), FILLVAL);
+            const unsigned old_objs = ih.objects;
             ih.objects = tryremove(IDADDR(PEDIR_BASERELOC), ih.objects);
+            if (old_objs != ih.objects && 1) { // was removed
+                IDADDR(PEDIR_BASERELOC) = 0;
+                IDSIZE(PEDIR_BASERELOC) = 0;
+                const unsigned oam1 = ih.objectalign - 1;
+                ih.imagesize =
+                    (isection[-1 + ih.objects].vsize + isection[-1 + ih.objects].vaddr + oam1) &
+                    ~oam1;
+            }
         }
         mb_orelocs.alloc(1);
         mb_orelocs.clear();
-        orelocs = mb_orelocs; // => orelocs now is a SPAN_S
+        orelocs = SPAN_S_MAKE(byte, mb_orelocs); // => orelocs now is a SPAN_S
         sorelocs = 0;
         return;
     }
@@ -632,14 +651,14 @@ void PeFile64::processRelocs() // pass1
         if (ic != IMAGE_REL_BASED_DIR64 && counts[ic])
             infoWarning("skipping unsupported relocation type %d (%d)", ic, counts[ic]);
 
-    LE32 *fix[16];
+    LE32 *fix[16] = {};
     auto fix_deleter = upx::ArrayDeleter(fix, 0); // don't leak memory
     for (unsigned ic = 0; ic < 16; ic++) {
         fix[ic] = New(LE32, counts[ic]);
         fix_deleter.count += 1;
     }
 
-    unsigned xcounts[16];
+    unsigned xcounts[16] = {};
     memset(xcounts, 0, sizeof(xcounts));
 
     // prepare sorting
@@ -675,7 +694,7 @@ void PeFile64::processRelocs() // pass1
 
     ibuf.fill(IDADDR(PEDIR_BASERELOC), IDSIZE(PEDIR_BASERELOC), FILLVAL);
     mb_orelocs.alloc(mem_size(4, relocnum, 8192)); // 8192 - safety
-    orelocs = mb_orelocs;                          // => orelocs now is a SPAN_S
+    orelocs = SPAN_S_MAKE(byte, mb_orelocs);       // => orelocs now is a SPAN_S
     sorelocs = optimizeReloc(xcounts[IMAGE_REL_BASED_DIR64], (byte *) fix[IMAGE_REL_BASED_DIR64],
                              orelocs, ibuf + rvamin, ibufgood - rvamin, 64, true, &big_relocs);
 
@@ -939,7 +958,7 @@ public:
     }
 }; // class PeFile::ImportLinker
 
-/*static*/ const char PeFile::ImportLinker::zeros[sizeof(import_desc)] = {0};
+/*static*/ const char PeFile::ImportLinker::zeros[sizeof(import_desc)] = {};
 
 void PeFile::addKernelImport(const char *name) { ilinker->add_import(kernelDll(), name); }
 
@@ -1043,7 +1062,12 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
 
         soimport += strlen(dlls[ic].name) + 1 + 4;
 
-        for (IPTR_VAR(const LEXX, tarr, dlls[ic].lookupt); *tarr; tarr += 1) {
+        unsigned i_tarr = 0;
+        for (IPTR_VAR(const LEXX, tarr, dlls[ic].lookupt); *tarr; tarr += 1, i_tarr += 1) {
+            if (0xfffdu & (*tarr >> 30)) { // UPX_RSIZE_MAX_MEM but allowing (1<<31)
+                throwCantPack("bad import %s[%#x]:%#llx", dlls[ic].name, i_tarr,
+                              (unsigned long long) *tarr);
+            }
             if (*tarr & ord_mask) {
                 importbyordinal = true;
                 soimport += 2; // ordinal num: 2 bytes
@@ -1061,7 +1085,7 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
     }
     mb_oimport.alloc(soimport);
     mb_oimport.clear();
-    oimport = mb_oimport;
+    oimport = SPAN_S_MAKE(byte, mb_oimport); // => now is a SPAN_S
 
     // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
     upx_qsort(idlls, dllnum, sizeof(idlls[0]), UDll::compare);
@@ -1083,11 +1107,12 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
             if (strcasecmp(idlls[ic]->name, "kernel32.dll"))
                 continue;
             if (idlls[ic]->ordinal)
-                for (const LEXX *tarr = idlls[ic]->lookupt; *tarr; tarr++)
+                for (const LEXX *tarr = idlls[ic]->lookupt; *tarr; tarr++) {
                     if (*tarr & ord_mask) {
                         ilinker->add_import(kernelDll(), *tarr & 0xffff);
                         kernel32ordinal = true;
                     }
+                }
         } else if (!ilinker->hasDll(idlls[ic]->name)) {
             if (idlls[ic]->shname && !idlls[ic]->ordinal)
                 ilinker->add_import(idlls[ic]->name, idlls[ic]->shname);
@@ -1107,7 +1132,7 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
         set_le32(ppi, ilinker->getAddress(idlls[ic]->name));
         set_le32(ppi + 4, idlls[ic]->iat - rvamin);
         ppi += 8;
-        for (; *tarr; tarr++)
+        for (; *tarr; tarr++) {
             if (*tarr & ord_mask) {
                 const unsigned ord = *tarr & 0xffff;
                 if (idlls[ic]->isk32 && kernel32ordinal) {
@@ -1127,21 +1152,23 @@ unsigned PeFile::processImports0(ord_mask_t ord_mask) { // pass 1
                 ppi += take2;
                 names.add_interval(*tarr, 2 + take2);
             }
+        }
         ppi++;
 
         const unsigned esize = ptr_udiff_bytes(tarr, idlls[ic]->lookupt);
         lookups.add_interval(idlls[ic]->lookupt, esize);
         if (ptr_diff_bytes(ibuf.subref("bad import name %#x", idlls[ic]->iat, 1),
                            idlls[ic]->lookupt) != 0) {
-            memcpy(ibuf.subref("bad import name %#x", idlls[ic]->iat, esize), idlls[ic]->lookupt,
-                   esize);
+            byte *a = ibuf.subref("bad import name %#x %#x", idlls[ic]->iat, esize);
+            // ptr_check_no_overlap(a, esize, idlls[ic]->lookupt, esize);
+            memmove(a, idlls[ic]->lookupt, esize);
             iats.add_interval(idlls[ic]->iat, esize);
         }
         names.add_interval(idlls[ic]->name, strlen(idlls[ic]->name) + 1 + 1);
     }
     ppi += 4;
     assert(ppi < oimport + soimport);
-    soimport = ptr_diff_bytes(ppi, oimport);
+    soimport = ptr_udiff_bytes(ppi, oimport);
 
     if (soimport == 4)
         soimport = 0;
@@ -1221,7 +1248,8 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
         throwInternalError(msg);
     }
     unsigned len = strlen(base + edir.name) + 1;
-    ename = strdup(base + edir.name);
+    ename = ::strdup(base + edir.name);
+    assert_noexcept(ename != nullptr);
     size += len;
     iv.add_interval(edir.name, len);
 
@@ -1233,7 +1261,14 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
         throwCantPack("export directory too big:  functions=%#x  names=%#x",
                       (unsigned) edir.functions, (unsigned) edir.names);
     }
+    // edir.name is checked above; the address/name/ordinal tables and the
+    // individual name RVAs are read from base with the same trust but were
+    // never confined to the export directory, so a crafted table RVA reads
+    // out of bounds. Keep every access within [eoffs, eoffs + esize).
+    const unsigned end = eoffs + esize;
     len = sizeof(LE32) * edir.functions;
+    if (edir.addrtable >= end || len > end - edir.addrtable)
+        throwCantPack("bad export address table RVA %#x", (unsigned) edir.addrtable);
     functionptrs = New(char, len + 1);
     memcpy(functionptrs, base + edir.addrtable, len);
     size += len;
@@ -1241,12 +1276,18 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
 
     unsigned ic;
     names = New(char *, edir.names + edir.functions + 1);
+    if (edir.nameptrtable >= end || sizeof(LE32) * edir.names > end - edir.nameptrtable)
+        throwCantPack("bad export name pointer table RVA %#x", (unsigned) edir.nameptrtable);
     for (ic = 0; ic < edir.names; ic++) {
-        char *n = base + get_le32(base + edir.nameptrtable + ic * sizeof(LE32));
+        const unsigned namerva = get_le32(base + edir.nameptrtable + ic * sizeof(LE32));
+        if (namerva >= end)
+            throwCantPack("bad export name RVA %#x", namerva);
+        char *n = base + namerva;
         len = strlen(n) + 1;
-        names[ic] = strdup(n);
+        names[ic] = ::strdup(n);
+        assert_noexcept(names[ic] != nullptr);
         size += len;
-        iv.add_interval(get_le32(base + edir.nameptrtable + ic * sizeof(LE32)), len);
+        iv.add_interval(namerva, len);
     }
     iv.add_interval(edir.nameptrtable, sizeof(LE32) * edir.names);
     size += sizeof(LE32) * edir.names;
@@ -1259,11 +1300,14 @@ void PeFile::Export::convert(unsigned eoffs, unsigned esize) {
             len = strlen(forw) + 1;
             iv.add_interval(forw, len);
             size += len;
-            names[ic + edir.names] = strdup(forw);
+            names[ic + edir.names] = ::strdup(forw);
+            assert_noexcept(names[ic + edir.names] != nullptr);
         } else
             names[ic + edir.names] = nullptr;
 
     len = 2 * edir.names;
+    if (edir.ordinaltable >= end || len > end - edir.ordinaltable)
+        throwCantPack("bad export ordinal table RVA %#x", (unsigned) edir.ordinaltable);
     ordinals = New(char, len + 1);
     memcpy(ordinals, base + edir.ordinaltable, len);
     size += len;
@@ -1311,8 +1355,7 @@ void PeFile::Export::build(char *newbase, unsigned newoffs) {
     assert(exports - newbase == (int) size);
 }
 
-void PeFile::processExports(Export *xport) // pass1
-{
+void PeFile::processExports(Export *xport) { // pass1
     soexport = ALIGN_UP(IDSIZE(PEDIR_EXPORT), 4u);
     if (soexport == 0)
         return;
@@ -1325,11 +1368,10 @@ void PeFile::processExports(Export *xport) // pass1
     soexport = ALIGN_UP(xport->getsize(), 4u);
     mb_oexport.alloc(soexport);
     mb_oexport.clear();
-    oexport = mb_oexport;
+    oexport = SPAN_S_MAKE(byte, mb_oexport); // => now is a SPAN_S
 }
 
-void PeFile::processExports(Export *xport, unsigned newoffs) // pass2
-{
+void PeFile::processExports(Export *xport, unsigned newoffs) { // pass2
     if (soexport)
         xport->build((char *) raw_bytes(oexport, 0), newoffs);
 }
@@ -1450,7 +1492,7 @@ void PeFile::processTls1(Interval *iv, typename tls_traits<LEXX>::cb_value_t ima
     // the PE loader wants this stuff uncompressed
     mb_otls.alloc(aligned_sotls);
     mb_otls.clear();
-    otls = mb_otls; // => otls now is a SPAN_S
+    otls = SPAN_S_MAKE(byte, mb_otls); // => otls now is a SPAN_S
     const unsigned skip1 = IDADDR(PEDIR_TLS);
     const unsigned take1 = sizeof(tls);
     memcpy(otls, ibuf.subref("bad tls %#x", skip1, take1), take1);
@@ -1479,30 +1521,39 @@ void PeFile::processTls2(Reloc *const rel, const Interval *const iv, unsigned ne
 
     if (sotls == 0)
         return;
-    // add new relocation entries
 
+    // add new relocation entries
     if (tls_handler_offset > 0 && tls_handler_offset_reloc > 0)
         rel->add_reloc(tls_handler_offset + tls_handler_offset_reloc, reloc_type);
 
-    unsigned ic;
     // NEW: if TLS callbacks are used, relocate the VA of the callback chain, too - Stefan Widmann
-    for (ic = 0; ic < (use_tls_callbacks ? sizeof(LE32) * cb_size : (sizeof(LE32) - 1) * cb_size);
-         ic += cb_size)
-        rel->add_reloc(newaddr + ic, reloc_type);
+    for (unsigned ic = 0; ic < (unsigned) (use_tls_callbacks ? 4 : 3); ic++)
+        rel->add_reloc(newaddr + ic * cb_size, reloc_type);
 
     SPAN_S_VAR(tls, const tlsp, mb_otls);
     // now the relocation entries in the tls data area
-    for (ic = 0; ic < iv->ivnum; ic += sizeof(LE32)) {
+    for (unsigned ic = 0; ic < iv->ivnum; ic++) {
         SPAN_S_VAR(byte, const pp,
                    otls + (iv->ivarr[ic].start - (tlsp->datastart - imagebase) + sizeof(tls)));
         LEXX *const p = (LEXX *) raw_bytes(pp, sizeof(LEXX));
         cb_value_t kc = *p;
-        if (kc < tlsp->dataend && kc >= tlsp->datastart) {
+        if (kc >= tlsp->datastart && kc < tlsp->dataend) {
+            // add a relocation entry referring to an address inside of the original tls data area
+            // - as the new tls area is moved, the referred address have to be also adjusted
             kc += newaddr + sizeof(tls) - tlsp->datastart;
             *p = kc + imagebase;
             rel->add_reloc(kc, iv->ivarr[ic].len);
-        } else
-            rel->add_reloc(kc - imagebase, iv->ivarr[ic].len);
+        } else {
+            // add a relocation entry referring to an address outside of the original tls data area
+            // by adding the difference of the new tlsdatastart and the old tlsdatastart to
+            // the address of the original relocation record
+            const unsigned a =
+                iv->ivarr[ic].start + (newaddr + sizeof(tls)) - (tlsp->datastart - imagebase);
+            // Must not overwrite compressed data
+            if (a < newaddr && !opt->win32_pe.strip_relocs)
+                throwCantPack("relocation too low (%#x < %#x); try --strip-relocs", a, newaddr);
+            rel->add_reloc(a, iv->ivarr[ic].len);
+        }
     }
 
     const unsigned tls_data_size = tlsp->dataend - tlsp->datastart;
@@ -1541,6 +1592,9 @@ void PeFile::processLoadConf(Interval *iv) { // pass 1
     static constexpr unsigned MAX_SOLOADCONF = 256; // XXX FIXME: Why?
     if (soloadconf > MAX_SOLOADCONF)
         info("Load Configuration directory %u > %u", soloadconf, MAX_SOLOADCONF);
+    if (lcaddr + soloadconf > ibuf.getSize()) {
+        throwCantPack("load config size exceeds file bounds");
+    }
 
     // if there were relocation entries referring to the load config table
     // then we need them for the copy of the table too
@@ -1560,8 +1614,7 @@ void PeFile::processLoadConf(Interval *iv) { // pass 1
 }
 
 void PeFile::processLoadConf(Reloc *rel, const Interval *iv,
-                             unsigned newaddr) // pass2
-{
+                             unsigned newaddr) { // pass2
     // now we have the address of the new load config table
     // so we can create the new relocation entries
     for (unsigned ic = 0; ic < iv->ivnum; ic++) {
@@ -1598,20 +1651,20 @@ struct alignas(1) PeFile::Resource::res_data final {
 };
 
 struct PeFile::Resource::upx_rnode /*not_final*/ {
-    unsigned id;
-    byte *name;
-    upx_rnode *parent;
+    unsigned id = 0;
+    byte *name = nullptr;
+    upx_rnode *parent = nullptr;
 };
 
 struct PeFile::Resource::upx_rbranch final : public PeFile::Resource::upx_rnode {
-    unsigned nc;
-    upx_rnode **children;
+    unsigned nc = 0;
+    upx_rnode **children = nullptr;
     res_dir data;
 };
 
 struct PeFile::Resource::upx_rleaf final : public PeFile::Resource::upx_rnode {
-    upx_rleaf *next;
-    unsigned newoffset;
+    upx_rleaf *next = nullptr;
+    unsigned newoffset = 0;
     res_data data;
 };
 
@@ -1725,16 +1778,16 @@ PeFile::Resource::upx_rnode *PeFile::Resource::convert(const void *rnode, upx_rn
     branch->id = 0;
     branch->name = nullptr;
     branch->parent = parent;
+    branch->children = New0(upx_rnode *, ic);
     branch->nc = ic;
-    branch->children = New(upx_rnode *, ic);
     branch->data = *node;
     if (!root)         // first one
         root = branch; // prevent leak if xcheck throws (hacked unpack or test)
 
     for (const res_dir_entry *rde = node->entries + ic - 1; --ic >= 0; rde--) {
         upx_rnode *child = convert(start + (rde->child & 0x7fffffff), branch, level + 1);
-        xcheck(child);
         branch->children[ic] = child;
+        xcheck(child);
         child->id = rde->tnl;
         if (child->id & 0x80000000) {
             const byte *p = start + (child->id & 0x7fffffff);
@@ -1809,7 +1862,7 @@ byte *PeFile::Resource::build() {
 }
 
 void PeFile::Resource::destroy(upx_rnode *node, unsigned level) noexcept {
-    xcheck(node);
+    xcheck_noexcept(node);
     if (level == 3) {
         upx_rleaf *leaf = ACC_STATIC_CAST(upx_rleaf *, node);
         delete[] leaf->name;
@@ -1820,7 +1873,8 @@ void PeFile::Resource::destroy(upx_rnode *node, unsigned level) noexcept {
         delete[] branch->name;
         branch->name = nullptr;
         for (int ic = branch->nc; --ic >= 0;)
-            destroy(branch->children[ic], level + 1);
+            if (branch->children[ic] != nullptr)
+                destroy(branch->children[ic], level + 1);
         delete[] branch->children;
         branch->children = nullptr;
         delete branch;
@@ -1953,7 +2007,7 @@ void PeFile::processResources(Resource *res) {
         return; // empty .rsrc Section
     mb_oresources.alloc(soresources);
     mb_oresources.clear();
-    oresources = mb_oresources; // => SPAN_S
+    oresources = SPAN_S_MAKE(byte, mb_oresources); // => now is a SPAN_S
     SPAN_S_VAR(byte, ores, oresources + res->dirsize());
 
     char *keep_icons = nullptr; // icon ids in the first icon group
@@ -2058,9 +2112,11 @@ void PeFile::processResources(Resource *res) {
          usize);
 }
 
-unsigned PeFile::virta2objnum(unsigned addr, SPAN_0(pe_section_t) sect, unsigned objs) {
+/*static*/
+unsigned PeFile::virta2objnum(unsigned addr, SPAN_0(const pe_section_t) sect, unsigned objs) {
     unsigned ic;
     for (ic = 0; ic < objs; ic++) {
+        // if (sect->vaddr >= addr && sect->vaddr + sect->vsize < addr) // ???
         if (sect->vaddr <= addr && sect->vaddr + sect->vsize > addr)
             return ic;
         sect++;
@@ -2083,25 +2139,32 @@ unsigned PeFile::stripDebug(unsigned overlaystart) {
     if (IDADDR(PEDIR_DEBUG) == 0)
         return overlaystart;
 
-    struct alignas(1) DebugDir final {
-        byte _[16]; // flags, time/date, version, type
-        LE32 size;
-        byte __[4]; // rva
-        LE32 fpos;
-    };
-
     COMPILE_TIME_ASSERT(sizeof(DebugDir) == 28)
     COMPILE_TIME_ASSERT_ALIGNED1(DebugDir)
-    COMPILE_TIME_ASSERT(sizeof(((DebugDir *) nullptr)->_) == 16)
-    COMPILE_TIME_ASSERT(sizeof(((DebugDir *) nullptr)->__) == 4)
 
     const unsigned skip = IDADDR(PEDIR_DEBUG);
     const unsigned take = IDSIZE(PEDIR_DEBUG);
-    const DebugDir *dd = (const DebugDir *) ibuf.subref("bad debug %#x", skip, take);
-    for (unsigned ic = 0; ic < IDSIZE(PEDIR_DEBUG) / sizeof(DebugDir); ic++, dd++)
+    DebugDir *const dd0 = (DebugDir *) ibuf.subref("bad debug %#x", skip, take);
+    DebugDir *dd = dd0;
+    for (unsigned ic = 0; ic < IDSIZE(PEDIR_DEBUG) / sizeof(DebugDir); ic++, dd++) {
+        if (IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS == dd->type && dd->size == sizeof(LE32) &&
+            dd->fpos <= (file_size_u - sizeof(LE32))) {
+            // fpos need not belong to any PEDIR_* section.
+            // Read directly from input file, but keep position (paranoia).
+            LE32 word = {};
+            const upx_off_t now_pos = fi->tell();
+            fi->seek(dd->fpos, SEEK_SET);
+            fi->readx(&word, sizeof(word));
+            fi->seek(now_pos, SEEK_SET);
+            if (IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT & word) {
+                *(dbgCET = dd0) = *dd; // remember presence; copy to front
+            }
+        }
         if (overlaystart == dd->fpos)
             overlaystart += dd->size;
-    ibuf.fill(IDADDR(PEDIR_DEBUG), IDSIZE(PEDIR_DEBUG), FILLVAL);
+    }
+    ibuf.fill((!dbgCET ? 0 : sizeof(DebugDir)) + IDADDR(PEDIR_DEBUG),
+              (!dbgCET ? 0 : -(int) sizeof(DebugDir)) + IDSIZE(PEDIR_DEBUG), FILLVAL);
     return overlaystart;
 }
 
@@ -2190,8 +2253,7 @@ unsigned PeFile::handleStripRelocs(upx_uint64_t ih_imagebase, upx_uint64_t defau
         if (isdll || isefi)
             throwCantPack("--strip-relocs is not allowed with DLL and EFI images");
         if (dllflags & IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE) {
-            if (opt->force) // Disable ASLR
-            {
+            if (opt->force) { // Disable ASLR
                 // The bit is set, so clear it with XOR
                 dllflags ^= IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE;
                 // HIGH_ENTROPY_VA has no effect without DYNAMIC_BASE, so clear
@@ -2442,7 +2504,9 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     callCompressWithFilters(ft, filter_strategy, ih.codebase);
     // info: see buildLoader()
     newvsize = (ph.u_len + rvamin + ph.overlap_overhead + oam1) & ~oam1;
-    if (tlsindex && ((newvsize - ph.c_len - 1024 + oam1) & ~oam1) > tlsindex + 4)
+    // but keep PETLSHAK for DLLs: the loader sets the tls index after
+    // LoadLibrary, so it must survive decompression
+    if (tlsindex && !isdll && ((newvsize - ph.c_len - 1024 + oam1) & ~oam1) > tlsindex + 4)
         tlsindex = 0;
 
     const int oh_filealign = UPX_MIN(ih.filealign, 0x200u);
@@ -2488,8 +2552,8 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     obuf.clear(ph.c_len, c_len - ph.c_len);
 
     const unsigned aligned_sotls = ALIGN_UP(sotls, usizeof(LEXX));
-    const unsigned s1size =
-        ALIGN_UP(ic + c_len + codesize, usizeof(LEXX)) + aligned_sotls + soloadconf;
+    const unsigned s1size = ALIGN_UP(ic + c_len + codesize, usizeof(LEXX)) + aligned_sotls +
+                            soloadconf + (dbgCET ? (sizeof(LE32) + sizeof(*dbgCET)) : 0);
     const unsigned s1addr = (newvsize - (ic + c_len) + oam1) & ~oam1;
 
     const unsigned ncsection = (s1addr + s1size + oam1) & ~oam1;
@@ -2507,7 +2571,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     oh.chksum = 0;
 
     // fill the data directory
-    ODADDR(PEDIR_DEBUG) = 0;
+    ODADDR(PEDIR_DEBUG) = 0; // dbgCET later
     ODSIZE(PEDIR_DEBUG) = 0;
     ODADDR(PEDIR_IAT) = 0;
     ODSIZE(PEDIR_IAT) = 0;
@@ -2515,7 +2579,8 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     ODSIZE(PEDIR_BOUND_IMPORT) = 0;
 
     // tls & loadconf are put into section 1
-    ic = s1addr + s1size - aligned_sotls - soloadconf;
+    ic = s1addr + s1size - aligned_sotls - soloadconf -
+         (dbgCET ? (sizeof(LE32) + sizeof(*dbgCET)) : 0);
 
     if (use_tls_callbacks)
         tls_handler_offset = linker->getSymbolOffset("PETLSC2") + upxsection;
@@ -2530,6 +2595,14 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
     ODSIZE(PEDIR_LOAD_CONFIG) = soloadconf;
     ic += soloadconf;
 
+    if (dbgCET) {
+        int delta = ic - dbgCET->rva;
+        dbgCET->rva = ic;
+        dbgCET->fpos += delta;
+        ODADDR(PEDIR_DEBUG) = ic;
+        ODSIZE(PEDIR_DEBUG) = sizeof(*dbgCET);
+        ic += sizeof(LE32) + ODSIZE(PEDIR_DEBUG);
+    }
     const bool rel_at_sections_start = last_section_rsrc_only;
 
     ic = ncsection;
@@ -2675,6 +2748,19 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
         fo->write(ibuf, sizeof(LEXX) - ic);
     fo->write(otls, aligned_sotls);
     fo->write(oloadconf, soloadconf);
+    if (dbgCET) {
+        ic = fo->getBytesWritten();
+        dbgCET->fpos = ic + sizeof(*dbgCET);
+        dbgCET->rva = osection[1].vaddr + dbgCET->fpos - osection[1].rawdataptr;
+        LE32 word;
+        set_le32(&word, IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT);
+        if (0) { // set all bytes t0 zero
+            memset(dbgCET, 0, sizeof(*dbgCET));
+            set_le32(&word, 0);
+        }
+        fo->write(dbgCET, sizeof(*dbgCET));
+        fo->write(&word, sizeof(word));
+    }
     if ((ic = fo->getBytesWritten() & fam1) != 0)
         fo->write(ibuf, oh.filealign - ic);
     if (!last_section_rsrc_only)
@@ -2695,7 +2781,7 @@ void PeFile::pack0(OutputFile *fo, ht &ih, ht &oh, unsigned subsystem_mask,
             fo->write(ibuf, oh.filealign - ic);
     }
 
-#if 0
+#if 0 // (debug) print section sizes
     printf("%-13s: program hdr  : %8d bytes\n", getName(), (int) sizeof(oh));
     printf("%-13s: sections     : %8d bytes\n", getName(), (int) sizeof(osection[0]) * oobjs);
     printf("%-13s: ident        : %8d bytes\n", getName(), (int) identsize);
@@ -2733,15 +2819,32 @@ void PeFile::rebuildRelocs(SPAN_S(byte) & extra_info, unsigned bits, unsigned fl
         (flags & IMAGE_FILE_RELOCS_STRIPPED))
         return;
 
-    if (ODSIZE(PEDIR_BASERELOC) == 8) // some tricky dlls use this
-    {
+    if (ODSIZE(PEDIR_BASERELOC) == 8) { // some tricky dlls use this
         omemcpy(obuf + (ODADDR(PEDIR_BASERELOC) - rvamin), "\x0\x0\x0\x0\x8\x0\x0\x0", 8);
         return;
     }
 
-    const unsigned orig_crelocs = mem_size(1, get_le32(extra_info));
-    const byte big = extra_info[4];
-    extra_info += 5;
+    // Comments at end of this file say that compressed relocs are optional.
+    // Try to detect their presence.  There might be no compressed relocs.
+#if WITH_XSPAN >= 2 && 1
+    const size_t headway = extra_info.size_bytes();
+#else
+    // FIXME: last 4 bytes of extra_info are the file offset of extra_info,
+    // so they should be excluded from the count of data bytes.
+    // Something is peculiar unless WITH_XSPAN >= 2.
+    // Also, optional icondir_count is strange following compressed relocs.
+    const size_t headway = 9;
+#endif
+    unsigned orig_crelocs = 0;
+    byte big = 0;
+    if (headway >= 8) {
+        orig_crelocs = mem_size(1, get_le32(extra_info));
+        extra_info += 4;
+        if (headway >= 9) {
+            big = extra_info[0];
+            extra_info += 1;
+        }
+    }
 
     SPAN_S_VAR(const byte, rdata, obuf + orig_crelocs, obuf);
     MemBuffer mb_wrkmem;
@@ -2786,6 +2889,7 @@ void PeFile::rebuildRelocs(SPAN_S(byte) & extra_info, unsigned bits, unsigned fl
     mb_wrkmem.dealloc();
 
     ODSIZE(PEDIR_BASERELOC) = soxrelocs;
+    // FIXME?:  ODADDR(PEDIR_BASERELOC) for compressed relocs?
 }
 
 void PeFile::rebuildExports() {
@@ -2828,7 +2932,7 @@ void PeFile::rebuildResources(SPAN_S(byte) & extra_info, unsigned lastvaddr) {
 
     // INFO: use VPtr for "virtual pointer" pointing before a buffer
     //// const byte *const r = ibuf.raw_bytes(0) - lastvaddr;
-    VPtr<const byte> const r{ibuf, lastvaddr};
+    const VPtr<const byte> r{ibuf, lastvaddr};
     Resource res(raw_bytes(r + vaddr, 0), ibuf, ibuf + ibuf.getSize());
     while (res.next())
         if (res.offs() > vaddr) {
@@ -2861,11 +2965,11 @@ void PeFile::rebuildImports(SPAN_S(byte) & extra_info, ord_mask_t ord_mask, bool
 
     unsigned sdllnames = 0;
 
-    IPTR_VAR_OFFSET(const byte, const import, IDADDR(PEDIR_IMPORT) - isection[2].vaddr);
+    IPTR_VAR_OFFSET(const byte, const my_import, IDADDR(PEDIR_IMPORT) - isection[2].vaddr);
     OPTR_VAR(const byte, p, raw_bytes(imdata, 4));
 
     for (; get_le32(p) != 0; ++p) {
-        const byte *dname = raw_bytes(import + mem_size(1, get_le32(p)), 1);
+        const byte *dname = raw_bytes(my_import + mem_size(1, get_le32(p)), 1);
         const unsigned dlen = strlen(dname);
         ICHECK(dname, dlen + 1);
 
@@ -2882,7 +2986,7 @@ void PeFile::rebuildImports(SPAN_S(byte) & extra_info, ord_mask_t ord_mask, bool
 
     // INFO: use VPtr for "virtual pointer" pointing before a buffer
     //// byte *const Obuf = obuf.raw_bytes(0) - rvamin;
-    VPtr<byte> const Obuf{obuf, rvamin};
+    const VPtr<byte> Obuf{obuf, rvamin};
     SPAN_S_VAR(import_desc, im, (import_desc *) raw_bytes(Obuf + ODADDR(PEDIR_IMPORT), 0), obuf);
     SPAN_0_VAR(byte, dllnames, inamespos ? raw_bytes(Obuf + inamespos, 0) : nullptr, obuf);
     SPAN_0_VAR(byte, const importednames_start, inamespos ? dllnames + sdllnames : nullptr);
@@ -2890,7 +2994,7 @@ void PeFile::rebuildImports(SPAN_S(byte) & extra_info, ord_mask_t ord_mask, bool
 
     for (p = imdata; get_le32(p) != 0; ++p) {
         // restore the name of the dll
-        const byte *dname = raw_bytes(import + get_le32(p), 1);
+        const byte *dname = raw_bytes(my_import + get_le32(p), 1);
         const unsigned dlen = strlen(dname);
         ICHECK(dname, dlen + 1);
 
@@ -2931,7 +3035,7 @@ void PeFile::rebuildImports(SPAN_S(byte) & extra_info, ord_mask_t ord_mask, bool
                 //;;;printf(" %x",(unsigned)*newiat);
                 p += 3;
             } else {
-                *newiat = *(const LEXX *) raw_bytes(import + get_le32(p + 1), sizeof(LEXX));
+                *newiat = *(const LEXX *) raw_bytes(my_import + get_le32(p + 1), sizeof(LEXX));
                 assert(*newiat & ord_mask);
                 p += 5;
             }
@@ -3030,8 +3134,6 @@ void PeFile::unpack0(OutputFile *fo, const ht &ih, ht &oh, ord_mask_t ord_mask, 
     // memset(eistart, 0, ptr_udiff_bytes(extra_info, eistart) + 4);
 
     // fill the data directory
-    ODADDR(PEDIR_DEBUG) = 0;
-    ODSIZE(PEDIR_DEBUG) = 0;
     ODADDR(PEDIR_IAT) = 0;
     ODSIZE(PEDIR_IAT) = 0;
     ODADDR(PEDIR_BOUND_IMPORT) = 0;
@@ -3131,7 +3233,7 @@ PeFile::~PeFile() noexcept {
 }
 
 /*************************************************************************
-//  PeFile32
+// PeFile32
 **************************************************************************/
 
 PeFile32::PeFile32(InputFile *f) : super(f) {
@@ -3186,7 +3288,7 @@ void PeFile32::processTls(Reloc *r, const Interval *iv, unsigned a) {
 }
 
 /*************************************************************************
-//  PeFile64
+// PeFile64
 **************************************************************************/
 
 PeFile64::PeFile64(InputFile *f) : super(f) {

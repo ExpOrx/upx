@@ -40,7 +40,7 @@ elif [[ -n $CMAKE_CROSSCOMPILING_EMULATOR ]]; then
     true
 else
     upx_exe_runner=emu_gdb
-    : ${upx_run_packed_test_count:=100}
+    : ${upx_run_packed_test_count:=20}
 fi
 
 source "$argv0dir/mimic_ctest.sh"

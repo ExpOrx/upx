@@ -3,9 +3,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,8 +33,8 @@
 /* clang-format off */
 
 #define STUB_I386_LINUX_ELF_INTERP_FOLD_SIZE    1702
-#define STUB_I386_LINUX_ELF_INTERP_FOLD_ADLER32 0xb304ec0f
-#define STUB_I386_LINUX_ELF_INTERP_FOLD_CRC32   0xf8817a49
+#define STUB_I386_LINUX_ELF_INTERP_FOLD_ADLER32 0x6be6ec07
+#define STUB_I386_LINUX_ELF_INTERP_FOLD_CRC32   0x02ec49d2
 
 unsigned char stub_i386_linux_elf_interp_fold[1702] = {
 /* 0x0000 */ 127, 69, 76, 70,  1,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -46,9 +46,9 @@ unsigned char stub_i386_linux_elf_interp_fold[1702] = {
 /* 0x0060 */   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 /* 0x0070 */   0, 16,  0,  0, 93, 89, 88,141,124,132,  4, 80, 41,192,175,117,
 /* 0x0080 */ 253,175,137,254,139,  6,131,248,  3,116,  8,131,198,  8,131,248,
-/* 0x0090 */   0,117,241,139, 94,  4, 83,129,236,  0, 10,  0,  0,137,226, 81,
+/* 0x0090 */   0,117,241,139, 94,  4, 83,129,236,  0,  4,  0,  0,137,226, 81,
 /* 0x00a0 */ 141, 67, 88,139,115, 24, 41,198,139, 24,139, 72,  4,131,193, 12,
-/* 0x00b0 */  96,232,236,  4,  0,  0,129,196, 36, 10,  0,  0, 91, 80,139, 75,
+/* 0x00b0 */  96,232,236,  4,  0,  0,129,196, 36,  4,  0,  0, 91, 80,139, 75,
 /* 0x00c0 */  20,139, 91,  8,184, 91,  0,  0,  0,205,128, 41,192, 41,201, 41,
 /* 0x00d0 */ 210, 41,219, 41,237, 41,246, 41,255,195, 83,141, 92, 36,  8,106,
 /* 0x00e0 */  90, 88,205,128, 91,195,  0,  0, 85, 87,137,215, 86,137,206, 83,
@@ -140,7 +140,7 @@ unsigned char stub_i386_linux_elf_interp_fold[1702] = {
 /* 0x0640 */  56,  3,116, 22, 66, 15,183,193,131, 69,240, 32, 57,208,127,236,
 /* 0x0650 */ 141,101,244,137,216, 91, 94, 95,201,195,185,  0,  0,  0,  0,139,
 /* 0x0660 */  88,  8,137,202,106,  5, 88,205,128,133,192,137,198,120, 21,186,
-/* 0x0670 */   0,  2,  0,  0,137,195,137,249,106,  3, 88,205,128, 61,  0,  2,
+/* 0x0670 */   0,  4,  0,  0,137,195,137,249,106,  3, 88,205,128, 61,  0,  4,
 /* 0x0680 */   0,  0,116, 10,106,127, 91,106,  1, 88,205,128,235,254,106,  0,
 /* 0x0690 */ 186,  0,  0,  0,  0,106,  0,137,240, 87,232,183,251,255,255,131,
 /* 0x06a0 */ 196, 12,137,195,235,170

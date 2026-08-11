@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -192,6 +192,10 @@ int InputFile::read(SPAN_P(void) buf, upx_int64_t blen) {
     if (!isOpen() || blen < 0)
         throwIOException("bad read");
     int len = (int) mem_size(1, blen); // sanity check
+#if WITH_XSPAN >= 2
+    NO_fprintf(stderr, "read %p %zu (%p) %d\n", buf.raw_ptr(), buf.raw_size_in_bytes(),
+               buf.raw_base(), len);
+#endif
     errno = 0;
     long l = acc_safe_hread(_fd, raw_bytes(buf, len), len);
     if (errno)
@@ -279,11 +283,11 @@ void OutputFile::write(SPAN_0(const void) buf, upx_int64_t blen) {
     if (blen == 0)
         return;
     int len = (int) mem_size(1, blen); // sanity check
-    errno = 0;
 #if WITH_XSPAN >= 2
-    NO_fprintf(stderr, "write %p %zd (%p) %d\n", buf.raw_ptr(), buf.raw_size_in_bytes(),
+    NO_fprintf(stderr, "write %p %zu (%p) %d\n", buf.raw_ptr(), buf.raw_size_in_bytes(),
                buf.raw_base(), len);
 #endif
+    errno = 0;
     long l = acc_safe_hwrite(_fd, raw_bytes(buf, len), len);
     if (l != len)
         throwIOException("write error", errno);
@@ -301,6 +305,12 @@ void OutputFile::write(SPAN_0(const void) buf, upx_int64_t blen) {
 #endif
 }
 
+void OutputFile::rewrite(SPAN_P(const void) buf, upx_int64_t blen) {
+    assert(!opt->to_stdout);
+    write(buf, blen);
+    bytes_written -= blen; // restore
+}
+
 upx_off_t OutputFile::st_size() const {
     if (opt->to_stdout) {     // might be a pipe ==> .st_size is invalid
         return bytes_written; // too big if seek()+write() instead of rewrite()
@@ -310,12 +320,6 @@ upx_off_t OutputFile::st_size() const {
     if (::fstat(_fd, &my_st) != 0)
         throwIOException(_name, errno);
     return my_st.st_size;
-}
-
-void OutputFile::rewrite(SPAN_P(const void) buf, int len) {
-    assert(!opt->to_stdout);
-    write(buf, len);
-    bytes_written -= len; // restore
 }
 
 upx_off_t OutputFile::seek(upx_off_t off, int whence) {
@@ -366,13 +370,14 @@ upx_off_t OutputFile::unset_extent() {
     return _length;
 }
 
-/*static*/ void OutputFile::dump(const char *name, SPAN_P(const void) buf, int len, int flags) {
+/*static*/
+void OutputFile::dump(const char *name, SPAN_P(const void) buf, upx_int64_t blen, int flags) {
     if (flags < 0)
         flags = O_CREAT | O_TRUNC;
     flags |= O_WRONLY | O_BINARY;
     OutputFile f;
     f.open(name, flags, 0600);
-    f.write(raw_bytes(buf, len), len);
+    f.write(buf, blen);
     f.closex();
 }
 

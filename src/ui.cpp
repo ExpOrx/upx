@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -79,7 +79,7 @@ struct UiPacker::State final {
 #endif
 };
 
-// static
+// static totals
 unsigned UiPacker::total_files = 0;
 unsigned UiPacker::total_files_done = 0;
 upx_uint64_t UiPacker::total_c_len = 0;
@@ -100,7 +100,7 @@ static const char header_line2[] = "   --------------------   ------   ---------
 
 static const char progress_filler[4 + 1] = ".*[]";
 
-static void init_global_constants(void) noexcept {
+static noinline void init_global_constants() noexcept {
 #if 0 && (ACC_OS_DOS16 || ACC_OS_DOS32)
     // FIXME: should test codepage here
 

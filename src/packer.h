@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -41,14 +41,14 @@ class Filter;
 // clients: PackMaster, UiPacker
 **************************************************************************/
 
-class PackerBase {
+class PackerBase /*not_final*/ {
     friend class UiPacker;
 protected:
     explicit PackerBase(InputFile *f);
 public:
     virtual ~PackerBase() noexcept {}
     // getVersion() enables detecting forward incompatibility of unpack()
-    // by old upx when newer upx changes the format of compressed output.
+    //   by old UPX when newer UPX changes the format of compressed output.
     virtual int getVersion() const = 0;
     // A unique integer ID for this executable format; see UPX_F_xxx in conf.h.
     virtual int getFormat() const = 0;
@@ -58,11 +58,11 @@ public:
     virtual const int *getFilters() const = 0;
 
     // canPack() should throw a cantPackException explaining why it cannot pack
-    // a recognized format.
+    //   a recognized format.
     // canPack() can also return -1 to fail early; see class PackMaster
     virtual tribool canPack() = 0;
     // canUnpack() should throw a cantUnpackException explaining why it cannot unpack
-    // a recognized format.
+    //   a recognized format.
     // canUnpack() can also return -1 to fail early; see class PackMaster
     virtual tribool canUnpack() = 0;
 
@@ -103,7 +103,7 @@ protected:
 // historically and really would benefit from a decomposition
 **************************************************************************/
 
-class Packer : public PackerBase {
+class Packer /*not_final*/ : public PackerBase {
 protected:
     explicit Packer(InputFile *f);
 
@@ -162,7 +162,7 @@ protected:
                              unsigned f_len, // subset of [*i_ptr, +i_len)
                              byte *const hdr_ptr, unsigned hdr_len,
                              Filter *parm_ft, // updated
-                             unsigned overlap_range, upx_compress_config_t const *cconf,
+                             unsigned overlap_range, const upx_compress_config_t *cconf,
                              int filter_strategy, bool inhibit_compression_check = false);
 
     // util for verifying overlapping decompression
@@ -189,7 +189,8 @@ protected:
     // loader util for linker
     virtual byte *getLoader() const;
     virtual int getLoaderSize() const;
-    virtual void initLoader(const void *pdata, int plen, int small = -1, int pextra = 0);
+    virtual void initLoader(unsigned arch, const void *pdata, int plen, int small = -1,
+                            int pextra = 0);
 #define C const char *
     void addLoader(C);
     void addLoader(C, C);
@@ -213,7 +214,8 @@ protected:
 
     // compression handling [see packer_c.cpp]
 public:
-    static bool isValidCompressionMethod(int method);
+    static bool isValidFormat(int format) noexcept;
+    static bool isValidCompressionMethod(int method) noexcept;
 
 protected:
     const int *getDefaultCompressionMethods_8(int method, int level, int small = -1) const;
@@ -248,7 +250,7 @@ protected:
     int patch_le32(void *b, int blen, const void *old, unsigned new_);
     void checkPatch(void *b, int blen, int boff, int size);
 
-    // relocation util
+    // relocation util [see packer_r.cpp]
     static unsigned optimizeReloc(unsigned relocnum, SPAN_P(byte) relocs, SPAN_S(byte) out,
                                   SPAN_P(byte) image, unsigned image_size, int bits, bool bswap,
                                   int *big);
@@ -260,7 +262,12 @@ protected:
     // permissive version using "void *"
     inline unsigned get_te16(const void *p) const noexcept { return bele->get16(p); }
     inline unsigned get_te32(const void *p) const noexcept { return bele->get32(p); }
-    inline unsigned get_te64_32(const void *p) const { return (unsigned) bele->get64(p); }
+    inline unsigned get_te64_32(const void *p) const may_throw {
+        upx_uint64_t v = bele->get64(p);
+        if very_unlikely ((v >> 32) != 0)
+            throwCantPack("64-bit value too big %#llx", v);
+        return (unsigned) v;
+    }
     inline upx_uint64_t get_te64(const void *p) const noexcept { return bele->get64(p); }
     inline void set_te16(void *p, unsigned v) noexcept { bele->set16(p, v); }
     inline void set_te32(void *p, unsigned v) noexcept { bele->set32(p, v); }
@@ -293,11 +300,11 @@ protected:
         return bele->get32(p);
     }
     template <class T, class = enable_if_te64<T> >
-    inline unsigned get_te64_32(const T *p) const {
-        upx_uint64_t val = get_te64(p);
-        if (val >> 32)
-            throwCantPack("64-bit value too big %#llx", val);
-        return (unsigned) val;
+    inline unsigned get_te64_32(const T *p) const may_throw {
+        upx_uint64_t v = bele->get64(p);
+        if very_unlikely ((v >> 32) != 0)
+            throwCantPack("64-bit value too big %#llx", v);
+        return (unsigned) v;
     }
     template <class T, class = enable_if_te64<T> >
     inline upx_uint64_t get_te64(const T *p) const noexcept {

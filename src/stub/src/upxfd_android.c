@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2023 John F. Reiser
+   Copyright (C) John F. Reiser
    All Rights Reserved.
  */
 
@@ -30,7 +30,7 @@ void my_bkpt(void const *, ...);
 #define ANDROID_FRIEND 0
 #define addr_string(string) ({ \
     char const *str; \
-    asm(".set noreorder; bal 0f; nop; .asciz \"" string "\"; .balign 4\n0: move %0,$31; .set reorder" \
+    asm(".set noreorder; bal 0f; move %0,$31; .set reorder; .asciz \"" string "\"; .balign 4\n0:" \
 /*out*/ : "=r"(str) \
 /* in*/ : \
 /*und*/ : "ra"); \

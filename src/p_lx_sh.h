@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -29,11 +29,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_SH_H  //{
-#define __UPX_P_LX_SH_H 1
-
 
 /*************************************************************************
 // linux/sh386
@@ -68,8 +64,5 @@ protected:
     int o_shname;  // offset to name_of_shell
     int l_shname;  // length of name_of_shell
 };
-
-
-#endif /*} already included */
 
 /* vim:set ts=4 sw=4 et: */

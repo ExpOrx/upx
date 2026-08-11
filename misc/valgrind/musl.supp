@@ -9,6 +9,12 @@
    Memcheck:Cond
    fun:enframe
 }
+{
+   musl-malloc-get_nominal_size
+   Memcheck:Cond
+   fun:get_nominal_size
+   fun:__libc_free
+}
 
 # these are only needed for older musl versions
 

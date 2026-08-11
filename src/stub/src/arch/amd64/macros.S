@@ -3,8 +3,8 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2025 Laszlo Molnar
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Laszlo Molnar
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -34,7 +34,6 @@
 #undef x86_64
 
                 //.altmacro       // not supported by x86_64-linux-as-2.15
-                .code64
 
 .macro          section name
                 .section \name

@@ -3,9 +3,9 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 1996-2021 Markus Franz Xaver Johannes Oberhumer
-;  Copyright (C) 1996-2021 Laszlo Molnar
-;  Copyright (C) 2000-2021 John F. Reiser
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Laszlo Molnar
+;  Copyright (C) John F. Reiser
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -31,8 +31,10 @@
 ;
 */
 
+    .set mips1
     .set noreorder  # we handle branch delay sots explicitly
     .set noat  # assumbler should not use $at
+    .altmacro
 
 NBPW= 4
 SZ_DLINE= 128  # size of data cache line in Apple G5
@@ -119,6 +121,12 @@ decompress:  // (src *, cpr_len, dst *, &dstlen);
 ret_decompr: .globl ret_decompr
     ret; nop
 
+// Use proper endian in *fold.S
+//get4unal: .globl get4unal
+//        lwr v0,0(a0)  # little-endian (default)
+//        ret
+//          lwl v0,3(a0)
+
 #define src  a0
 #define lsrc a1
 #define dst  a2
@@ -129,6 +137,11 @@ eof_nrv: .globl eof_nrv
 eof_n2e: .globl eof_n2e
 eof_n2d: .globl eof_n2d
 eof_n2b: .globl eof_n2b
+.if DEBUG_NRV  //{
+    li at,LEN_ROV
+    addu sp,sp,at
+    POP4 s0,s1,s2,s3
+.endif  //} DEBUG_NRV
         POP1 a6  # P_45 (2 of 2) ra for decompress
         lw at,0*NBPW(sp)  # orig &b_info
         move a5,src; bal get4unal
@@ -145,7 +158,7 @@ eof_n2b: .globl eof_n2b
         lw tmp,0*NBPW(sp)  # &b_info
           nop
         subu v0,a5,tmp
-        subiu v0,sz_binfo  # actual len consumed
+        addiu v0,-sz_binfo  # actual len consumed
         b ret_decompr
           subu v0,v0,lsrc  # deviation at EOF
 #undef tmp
@@ -186,21 +199,22 @@ upx_mmap_and_fd: .globl upx_mmap_and_fd
   section NRV2E
     li at,M_NRV2E_LE32; bne at,meth,not_nrv2e
 #include "arch/mips/r3000/nrv2e_d.ash"
-    build nrv2e, full
+    build nrv2e, full, L810
+
 not_nrv2e:
 
   section NRV2D
     decomp_done = eof_n2d
     li at,M_NRV2D_LE32; bne at,meth,not_nrv2d
 #include "arch/mips/r3000/nrv2d_d.ash"
-    build nrv2d, full
+    build nrv2d, full, L820
 not_nrv2d:
 
   section NRV2B
     decomp_done = eof_n2b
     li at,M_NRV2B_LE32; bne at,meth,not_nrv2b
 #include "arch/mips/r3000/nrv2b_d.ash"
-    build nrv2b, full
+    build nrv2b, full, L830
 not_nrv2b:
 
 #undef off

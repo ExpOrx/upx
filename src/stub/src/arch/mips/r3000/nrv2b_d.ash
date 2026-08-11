@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UCL data compression library.
 ;
-;  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+;  Copyright (C) Markus Franz Xaver Johannes Oberhumer
 ;  All Rights Reserved.
 ;
 ;  The UCL library is free software; you can redistribute it and/or
@@ -54,6 +54,11 @@ n2b_1:
             b       n2b_1
             sb      var,-1(dst)
 n2b_2:
+.if DEBUG_NRV  //{ begin decode of block
+    sub at,src_ilen,src0
+    sw at,0(prov)
+    sw bb,4(prov)
+.endif  // DEBUG_NRV }
             GETBIT
             sll     m_off,1
         .if (UCL_SMALL == 1)

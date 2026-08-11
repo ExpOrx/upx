@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -35,12 +35,13 @@ class ElfLinker /*not_final*/ : private upx::noncopyable {
     friend class Packer;
 
 public:
-    const N_BELE_RTP::AbstractPolicy *const bele; // target endianness
+    const N_BELE_RTP::AbstractPolicy *const bele; // TE - Target Endianness
 protected:
     struct Section;
     struct Symbol;
     struct Relocation;
 
+    unsigned e_machine = 0; // EM_NONE
     byte *input = nullptr;
     int inputlen = 0;
     byte *output = nullptr;
@@ -64,9 +65,9 @@ protected:
     bool reloc_done = false;
 
 protected:
-    void preprocessSections(char *start, char const *end);
-    void preprocessSymbols(char *start, char const *end);
-    void preprocessRelocations(char *start, char const *end);
+    void preprocessSections(char *start, const char *end);
+    void preprocessSymbols(char *start, const char *end);
+    void preprocessRelocations(char *start, const char *end);
     Section *findSection(const char *name, bool fatal = true) const;
 
     Symbol *addSymbol(const char *name, const char *section, upx_uint64_t offset);
@@ -77,7 +78,7 @@ public:
     explicit ElfLinker(const N_BELE_RTP::AbstractPolicy *b = &N_BELE_RTP::le_policy) noexcept;
     virtual ~ElfLinker() noexcept;
 
-    void init(const void *pdata, int plen, unsigned pxtra = 0);
+    void init(unsigned arch, const void *pdata, int plen, unsigned pxtra = 0);
     // virtual void setLoaderAlignOffset(int phase);
     int addLoader(const char *sname);
     void addLoader(const char *s, va_list ap);
@@ -162,6 +163,13 @@ protected:
 };
 
 class ElfLinkerArm64LE final : public ElfLinker {
+    typedef ElfLinker super;
+protected:
+    virtual void relocate1(const Relocation *, byte *location, upx_uint64_t value,
+                           const char *type) override;
+};
+
+class ElfLinkerRiscv64LE final : public ElfLinker {
     typedef ElfLinker super;
 protected:
     virtual void relocate1(const Relocation *, byte *location, upx_uint64_t value,

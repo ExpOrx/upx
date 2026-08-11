@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,6 +28,7 @@
 #include "conf.h"
 #include "packhead.h"
 #include "filter.h" // for ft->unfilter()
+#include "packer.h" // for Packer::isValidFormat
 
 /*************************************************************************
 // PackHeader
@@ -45,14 +46,15 @@ void PackHeader::reset() noexcept {
     compress_result.reset();
 }
 
-int PackHeader::set_method(int m, unsigned offset) {
-    unsigned mc = ~(0x80u << 24) & m; // see ph_forced_method
-    unsigned lo = 0xFF & m;
+int PackHeader::set_method(const int m, const unsigned offset) { // check, then assign
+    const unsigned mc = ~(0x80u << 24) & m;                      // see ph_forced_method
+    const unsigned lo = 0xFF & m;
     // See packer_c.cpp for "hi bytes" in M_LZMA_003 and M_LZMA_407.
     // "hi bytes" are not allowed unless M_LZMA.
     if ((lo < M_NRV2B_LE32 || M_LZMA < lo || (M_LZMA != lo && mc != lo)) && ~0u != offset)
         throwCantPack("bad method %#x at %#x", (unsigned) m, offset);
-    return method = m;
+    method = m;
+    return method;
 }
 
 /*************************************************************************
@@ -212,10 +214,8 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
         fprintf(stderr, "  decodePackHeaderFromBuf  version=%d  format=%d  method=%d  level=%d\n",
                 version, format, method, level);
     }
-    if (!((format >= 1 && format <= UPX_F_W64PE_ARM64EC) ||
-          (format >= 129 && format <= UPX_F_DYLIB_PPC64))) {
+    if (!Packer::isValidFormat(format))
         throwCantUnpack("unknown format %d", format);
-    }
 
     //
     // decode the new variable length header
@@ -264,9 +264,9 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
         if (blen < off_filter + 1)
             throwCantUnpack("header corrupted 9");
         filter = p[off_filter];
-    } else if ((level & 128) == 0)
+    } else if ((level & 128) == 0) {
         filter = 0;
-    else {
+    } else {
         // convert old flags to new filter id
         level &= 127;
         if (format == UPX_F_DOS_COM || format == UPX_F_DOS_SYS)
@@ -303,18 +303,15 @@ bool PackHeader::decodePackHeaderFromBuf(SPAN_S(const byte) buf, int blen) {
 // ph method util
 **************************************************************************/
 
-bool ph_is_forced_method(int method) noexcept // predicate
-{
+bool ph_is_forced_method(int method) noexcept { // predicate
     return (method >> 24) == -0x80;
 }
 
-int ph_force_method(int method) noexcept // mark as forced
-{
+int ph_force_method(int method) noexcept { // mark as forced
     return method | (0x80u << 24);
 }
 
-int ph_forced_method(int method) noexcept // extract the forced method
-{
+int ph_forced_method(int method) noexcept { // extract the forced method
     if (ph_is_forced_method(method))
         method &= ~(0x80u << 24);
     assert_noexcept(method > 0);

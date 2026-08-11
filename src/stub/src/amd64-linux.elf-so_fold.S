@@ -1,6 +1,6 @@
 #include "arch/amd64/regs.h"
 #include "arch/amd64/macros.S"
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 NBPW= 8
 
 #ifndef DEBUG  //{
@@ -102,7 +102,7 @@ memcpy: .globl memcpy  // void *memcpy(void *dst, void const *src, size_t n)
 /* 64-bit mode only! */
 __NR_read=  0
 __NR_write= 1
-//__NR_open=  2
+__NR_open=  2
 __NR_openat= 257
   FD_CWD= -100
 __NR_close= 3
@@ -190,8 +190,6 @@ exit: .globl exit
         push $ __NR_exit; 5: jmp 5f
 ftruncate: .globl ftruncate
         push $__NR_ftruncate; 5: jmp 5f
-memfd_create: .globl memfd_create
-        push $__NR_memfd_create; 5: jmp 5f
 close: .globl close
         push $ __NR_close; 5: jmp 5f
 openat: .globl openat
@@ -201,5 +199,22 @@ write: .globl write
         push $__NR_write; 5: jmp 5f
 read: .globl read
         push $ __NR_read; 5: jmp sysgo
+
+memfd_create: .globl memfd_create
+0:
+        movl $__NR_memfd_create,%eax; syscall
+        test %eax,%eax; js 1f; ret  // success
+1:
+        test %arg2l,%arg2l; jz no_memfd  // memfd_create failed twice
+        xor %arg2l,%arg2l; jmp 0b  // try again without MFD_EXEC
+no_memfd:  // so try /dev/shm
+O_RDWR= 2
+O_DIRECTORY= 0200000  // 0x010000
+O_TMPFILE= 020000000  // 0x400000
+        call 0f; .int 0700, O_RDWR|O_DIRECTORY|O_TMPFILE; .asciz "/dev/shm"; 0: pop %rsi
+        lodsl;            xchg %eax,%arg3l
+        lodsl; push %rsi; xchg %eax,%arg2l
+               pop %arg1
+        push $__NR_open; jmp sysgo
 
 // section SO_MAIN inserted here

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -110,6 +110,8 @@ public:
 
     // info: allow nullptr if blen == 0
     void write(SPAN_0(const void) buf, upx_int64_t blen);
+    // FIXME - this won't work when using the '--stdout' option
+    void rewrite(SPAN_P(const void) buf, upx_int64_t blen);
 
     virtual upx_off_t seek(upx_off_t off, int whence) override;
     virtual upx_off_t st_size() const override; // { return _length; }
@@ -118,11 +120,8 @@ public:
 
     upx_off_t getBytesWritten() const { return bytes_written; }
 
-    // FIXME - this won't work when using the '--stdout' option
-    void rewrite(SPAN_P(const void) buf, int len);
-
     // util
-    static void dump(const char *name, SPAN_P(const void) buf, int len, int flags = -1);
+    static void dump(const char *name, SPAN_P(const void) buf, upx_int64_t blen, int flags = -1);
 
 protected:
     upx_off_t bytes_written = 0;

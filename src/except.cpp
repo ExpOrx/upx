@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -38,7 +38,7 @@ Throwable::Throwable(const char *m, int e, bool w) noexcept : super(),
                                                               err(e),
                                                               is_warning(w) {
     if (m != nullptr) {
-        msg = strdup(m);
+        msg = ::strdup(m);
         assert_noexcept(msg != nullptr);
     }
     NO_fprintf(stderr, "construct exception: %zu %zu %s\n", size_t(stats.counter_current),
@@ -52,7 +52,7 @@ Throwable::Throwable(const Throwable &other) noexcept : super(other),
                                                         err(other.err),
                                                         is_warning(other.is_warning) {
     if (other.msg != nullptr) {
-        msg = strdup(other.msg);
+        msg = ::strdup(other.msg);
         assert_noexcept(msg != nullptr);
     }
     NO_fprintf(stderr, "copy construct exception: %zu %zu %s\n", size_t(stats.counter_current),
@@ -187,7 +187,12 @@ void assertFailed(const char *expr, const char *file, int line, const char *func
     std::terminate();
 }
 
-void throwAssertFailed(const char *expr, const char *file, int line, const char *func) {
+void assertFailed(int e, const char *expr, const char *file, int line, const char *func) noexcept {
+    if very_unlikely (!e)
+        assertFailed(expr, file, line, func);
+}
+
+void throwAssertFailed(const char *expr, const char *file, int line, const char *func) may_throw {
     if (opt->debug.debug_level >= 1) {
         throwCantPack("corrupted file; details: %s (%s: %s: %d)", expr, file, func, line);
     } else {

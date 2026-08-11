@@ -8,7 +8,7 @@
 
 
                     The Ultimate Packer for eXecutables
-   Copyright (c) 1996-2025 Markus Oberhumer, Laszlo Molnar & John Reiser
+   Copyright (c) 1996-2026 Markus Oberhumer, Laszlo Molnar & John Reiser
                            https://upx.github.io
 
 
@@ -33,16 +33,22 @@ Andreas Muegge <andreas.muegge@gmx.de>
   for the Win32 GUI
 Atli Mar Gudmundsson <agudmundsson@symantec.com>
   for several comments on the win32/pe stub
+bitraid <bitraid@protonmail.ch>
+  for beta testing
 Charles W. Sandmann <sandmann@clio.rice.edu>
   for the idea with the stubless decompressor in djgpp2/coff
 Ice
   for debugging the PE headersize problem down
+Jeffrey H. Johnson <johnsonjh.dev@gmail.com>
+  for the cpm86/cmd format
 Jens Medoch <jssg@users.sourceforge.net>
   for the ps1/exe format
 Joergen Ibsen <jibz@hotmail.com> and d'b
   for the relocation & address optimization ideas
 John S. Fine <johnfine@erols.com>
   for the new version of the dos/exe decompressor
+Kartik Kenchi <netliomax25@gmail.com>
+  for beta testing
 Kornel Pal
   for the EFI support
 Lukundoo <Lukundoo@softhome.net>

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,6 +31,8 @@
 #include "packer.h"
 #include "p_com.h"
 #include "p_sys.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -61,7 +63,7 @@ tribool PackSys::canPack() {
 **************************************************************************/
 
 void PackSys::buildLoader(const Filter *ft) {
-    initLoader(stub_i086_dos16_sys, sizeof(stub_i086_dos16_sys));
+    initLoader(EM_386, stub_i086_dos16_sys, sizeof(stub_i086_dos16_sys));
     // clang-format off
     addLoader("SYSMAIN1",
               opt->cpu_x86 == opt->CPU_8086 ? "SYSI0861" : "SYSI2861",

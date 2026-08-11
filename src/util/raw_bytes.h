@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -43,6 +43,7 @@ inline
             throwCantPack("raw_bytes unexpected NULL ptr");
         if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, size_in_bytes) != 0))
             throwCantPack("raw_bytes valgrind-check-mem");
+        (void) mem_size_ptr(ptr, 1, size_in_bytes); // assert size
     }
     return ptr;
 }
@@ -57,7 +58,7 @@ raw_index_bytes(T ptr, size_t index, size_t size_in_bytes) may_throw {
     typedef typename std::remove_pointer<T>::type element_type;
     if very_unlikely (ptr == nullptr)
         throwCantPack("raw_index_bytes unexpected NULL ptr");
-    size_in_bytes = mem_size(sizeof(element_type), index, size_in_bytes); // assert size
+    size_in_bytes = mem_size_ptr(ptr, sizeof(element_type), index, size_in_bytes); // assert size
     if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, size_in_bytes) != 0))
         throwCantPack("raw_index_bytes valgrind-check-mem");
     UNUSED(size_in_bytes);

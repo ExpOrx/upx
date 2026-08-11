@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -65,7 +65,7 @@ PackUnix::PackUnix(InputFile *f) :
     // Besides, cannot figure out why asl_slide_Shdrs does not work.
 }
 
-PackUnix::~PackUnix()
+PackUnix::~PackUnix() noexcept
 {
     opt->o_unix.android_shlib = saved_opt_android_shlib;
 }
@@ -341,8 +341,6 @@ void PackUnix::packExtent(
     bool inhibit_compression_check
 )
 {
-    unsigned const init_u_adler = ph.u_adler;
-    unsigned const init_c_adler = ph.c_adler;
     MemBuffer hdr_ibuf;
     if (hdr_u_len) {
         hdr_ibuf.alloc(hdr_u_len);
@@ -352,6 +350,8 @@ void PackUnix::packExtent(
     }
     fi->seek(x.offset, SEEK_SET);
     for (off_t rest = x.size; 0 != rest; ) {
+        unsigned const init_u_adler = ph.u_adler;
+        unsigned const init_c_adler = ph.c_adler;
         int const filter_strategy = ft ? getStrategy(*ft) : 0;
         int l = fi->readx(ibuf, UPX_MIN(rest, (off_t)blocksize));
         if (l == 0) {
@@ -390,17 +390,19 @@ void PackUnix::packExtent(
             const upx_bytep tbuf = nullptr;
             if (ft == nullptr || ft->id == 0) tbuf = ibuf;
             ph.overlap_overhead = OVERHEAD;
-            if (!testOverlappingDecompression(obuf, tbuf, ph.overlap_overhead)) {
-                // not in-place compressible
+            if (!inhibit_compression_check
+            &&  !testOverlappingDecompression(obuf, tbuf, ph.overlap_overhead)) {
+                // not in-place de-compressible, so force a not-compressed block
                 ph.c_len = ph.u_len;
             }
         }
         if (ph.c_len >= ph.u_len) {
-            // block is not compressible
+            // block is not compressible, or not in-place de-compressible
             ph.c_len = ph.u_len;
             memcpy(obuf, ibuf, ph.c_len);
-            // must update checksum of compressed data
-            ph.c_adler = upx_adler32(ibuf, ph.u_len, ph.c_adler);
+            // must update checksum of "compressed" data
+            // Input to adler32 is value before the failure.
+            ph.c_adler = upx_adler32(ibuf, ph.u_len, init_c_adler);
         }
 
         // write block sizes
@@ -458,7 +460,8 @@ void PackUnix::packExtent(
             fo->write(obuf, ph.c_len);
             total_out += ph.c_len;
             // Checks ph.u_adler after decompression, after unfiltering
-            verifyOverlappingDecompression(ft);
+            if (!inhibit_compression_check)
+                verifyOverlappingDecompression(ft);
         }
         else {
             fo->write(ibuf, ph.u_len);
@@ -497,7 +500,7 @@ unsigned PackUnix::unpackExtent(unsigned wanted, OutputFile *fo,
             throwCantUnpack("corrupt b_info");
 
         // place the input for overlapping de-compression
-        int j = inlen + sz_unc + OVERHEAD - sz_cpr;
+        int j = inlen + sz_unc + OVERHEAD + (sz_unc >> ELF_NRV_FUDGE) - sz_cpr;
         if (ibuf.getSize() < (unsigned)(j + sz_cpr)) {
             throwCantUnpack("corrupt b_info");
         }
@@ -643,7 +646,7 @@ void PackUnix::unpack(OutputFile *fo)
 
     if ((int)(blocksize + OVERHEAD) < 0)
         throwCantUnpack("blocksize corrupted");
-    ibuf.alloc(blocksize + OVERHEAD);
+    ibuf.alloc(blocksize + OVERHEAD + (blocksize >> ELF_NRV_FUDGE));
 
     // decompress blocks
     total_in = 0;
@@ -658,7 +661,11 @@ void PackUnix::unpack(OutputFile *fo)
         fi->readx(&bhdr, szb_info);
         ph.u_len = sz_unc = get_te32(&bhdr.sz_unc);
         ph.c_len = sz_cpr = get_te32(&bhdr.sz_cpr);
-        ph.set_method(bhdr.b_method);
+        if (szb_info < sizeof(b_info)) { // some upx version 11
+            bhdr.b_method = ph.method;
+            bhdr.b_ftid = ph.filter;
+            bhdr.b_cto8 = ph.filter_cto;
+        }
 
         if (sz_unc == 0)                   // uncompressed size 0 -> EOF
         {

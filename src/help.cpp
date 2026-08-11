@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,11 +25,48 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+#if !defined(__has_attribute)
+static constexpr int has_attribute = 0;
+#else
+static constexpr int has_attribute = 1;
+#endif
+#if !defined(__has_builtin)
+static constexpr int has_builtin = 0;
+#else
+static constexpr int has_builtin = 1;
+#endif
+#if !defined(__has_cpp_attribute)
+static constexpr int has_cpp_attribute = 0;
+#else
+static constexpr int has_cpp_attribute = 1;
+#endif
+#if !defined(__has_declspec_attribute)
+static constexpr int has_declspec_attribute = 0;
+#else
+static constexpr int has_declspec_attribute = 1;
+#endif
+#if !defined(__has_feature)
+static constexpr int has_feature = 0;
+#else
+static constexpr int has_feature = 1;
+#endif
+#if !defined(__has_include)
+static constexpr int has_include = 0;
+#else
+static constexpr int has_include = 1;
+#endif
+#if !defined(__has_warning)
+static constexpr int has_warning = 0;
+#else
+static constexpr int has_warning = 1;
+#endif
+
 #if defined(_WIN32_WINNT)
 static constexpr long long initial_win32_winnt = _WIN32_WINNT + 0LL;
 #else
 static constexpr long long initial_win32_winnt = 0;
 #endif
+
 #define WANT_WINDOWS_LEAN_H 1 // _WIN32_WINNT
 #include "conf.h"
 #include "compress/compress.h" // upx_ucl_version_string()
@@ -49,7 +86,7 @@ const char gitrev[] = UPX_VERSION_GITREV;
 const char gitrev[1] = {0};
 #endif
 
-void show_header(void) {
+void show_header() {
     FILE *f = con_term;
     int fg;
 
@@ -85,7 +122,7 @@ void show_header(void) {
 // usage
 **************************************************************************/
 
-void show_usage(void) {
+void show_usage() {
     FILE *f = con_term;
 
     con_fprintf(f, "Usage: %s [-123456789dlthVL] [-qvfk] [-o file] %sfile..\n", progname,
@@ -106,7 +143,8 @@ struct PackerNames final {
     ~PackerNames() noexcept = default;
 
     static constexpr unsigned MAX_NAMES = 64; // arbitrary limit, increase as needed
-    struct Entry {
+    struct Entry final {
+        int format;
         const char *fname;
         const char *sname;
         unsigned methods_count;
@@ -119,16 +157,28 @@ struct PackerNames final {
     unsigned names_count = 0;
     const Options *o = nullptr;
 
-    void add(const PackerBase *pb) {
+    noinline void add(const PackerBase *pb) {
+        assert_noexcept(pb != nullptr);
+        const int format = pb->getFormat();
+        if (format != 25)
+            for (unsigned i = 0; i < names_count; i++)
+                assert_noexcept(names_array[i].format != format);
         assert_noexcept(names_count < MAX_NAMES);
         Entry &e = names_array[names_count];
+        mem_clear(&e);
         names[names_count++] = &e;
+        e.format = format;
+        assert_noexcept(Packer::isValidFormat(e.format));
         e.fname = pb->getFullName(o);
         e.sname = pb->getName();
-        e.methods_count = e.filters_count = 0;
+        assert_noexcept(e.fname != nullptr && e.fname[0]);
+        assert_noexcept(e.sname != nullptr && e.sname[0]);
         for (const int *m = pb->getCompressionMethods(M_ALL, 10); *m != M_END; m++) {
             if (*m >= 0) {
                 assert_noexcept(Packer::isValidCompressionMethod(*m));
+                assert_noexcept(*m != 0);
+                for (unsigned mm = 0; mm < e.methods_count; mm++)
+                    assert_noexcept(e.methods[mm] != (unsigned) *m);
                 assert_noexcept(e.methods_count < PackerBase::MAX_METHODS);
                 e.methods[e.methods_count++] = *m;
             }
@@ -136,14 +186,22 @@ struct PackerNames final {
         for (const int *f = pb->getFilters(); f != nullptr && *f != FT_END; f++) {
             if (*f >= 0) {
                 assert_noexcept(Filter::isValidFilter(*f));
+                assert_noexcept(*f != 0);
+                for (unsigned ff = 0; ff < e.filters_count; ff++)
+                    assert_noexcept(e.filters[ff] != (unsigned) *f);
                 assert_noexcept(e.filters_count < PackerBase::MAX_FILTERS);
                 e.filters[e.filters_count++] = *f;
             }
         }
+        assert_noexcept(e.methods_count >= 1);
         upx_gnomesort(e.methods, e.methods_count, sizeof(e.methods[0]), ne32_compare);
         upx_gnomesort(e.filters, e.filters_count, sizeof(e.filters[0]), ne32_compare);
+        NO_printf("%2u %3d %-36s %2u %2u\n", names_count, e.format, e.fname, e.methods_count,
+                  e.filters_count);
     }
     static tribool visit(PackerBase *pb, void *user) {
+        assert_noexcept(pb != nullptr);
+        assert_noexcept(user != nullptr);
         NO_fprintf(stderr, "visit %s\n", pb->getFullName(nullptr));
         PackerNames *self = (PackerNames *) user;
         self->add(pb);
@@ -160,6 +218,7 @@ struct PackerNames final {
 static noinline void list_all_packers(FILE *f, int verbose) {
     Options o;
     o.reset();
+    o.o_unix.use_ptinterp = true;
     PackerNames pn;
     pn.o = &o;
     (void) PackMaster::visitAllPackers(PackerNames::visit, nullptr, &o, &pn);
@@ -235,13 +294,10 @@ void show_help(int verbose) {
                 "  -q     be quiet                          -v    be verbose\n"
                 "  -oFILE write output to 'FILE'\n"
                 "  -f     force compression of suspicious files\n"
-                "%s%s"
+                "%s%s%s"
                 , (verbose == 0) ? "  -k     keep backup files\n" : ""
-#if 1
+                , (verbose > 0) ? "  -i     info mode\n" : ""
                 , (verbose > 0) ? "  --no-color, --mono, --color, --no-progress   change look\n" : ""
-#else
-                , ""
-#endif
                 );
 
     if (verbose > 0)
@@ -342,6 +398,7 @@ void show_help(int verbose) {
         fg = con_fg(f, fg);
         con_fprintf(f,
                     "  --preserve-build-id     copy .gnu.note.build-id to compressed output\n"
+                    "  --catch-sigsegv         debug errors in hardware or de-compressor\n"
                     "\n");
     }
     // clang-format on
@@ -380,7 +437,7 @@ void show_help(int verbose) {
 // license
 **************************************************************************/
 
-void show_license(void) {
+void show_license() {
     FILE *f = con_term;
 
     show_header();
@@ -468,9 +525,9 @@ void show_version(bool one_line) {
     fprintf(f, "doctest C++ testing framework version %s\n", DOCTEST_VERSION_STR);
 #endif
     // clang-format off
-    fprintf(f, "Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer\n");
-    fprintf(f, "Copyright (C) 1996-2025 Laszlo Molnar\n");
-    fprintf(f, "Copyright (C) 2000-2025 John F. Reiser\n");
+    fprintf(f, "Copyright (C) 1996-2026 Markus Franz Xaver Johannes Oberhumer\n");
+    fprintf(f, "Copyright (C) 1996-2026 Laszlo Molnar\n");
+    fprintf(f, "Copyright (C) 2000-2026 John F. Reiser\n");
 #if (WITH_ZLIB)
     // see vendor/zlib/LICENSE
     fprintf(f, "Copyright (C) 1995" "-2024 Jean-loup Gailly and Mark Adler\n");
@@ -516,7 +573,7 @@ void show_sysinfo(const char *options_var) {
     // Compilation Flags
     {
         size_t cf_count = 0;
-        auto cf_print = [f, &cf_count](const char *name, const char *fmt, upx_int64_t v,
+        auto cf_print = [f, &cf_count](const char *name, const char *fmt, long long v,
                                        int need_verbose = 2) noexcept {
             if (opt->verbose < need_verbose)
                 return;
@@ -573,6 +630,13 @@ void show_sysinfo(const char *options_var) {
 #if defined(_MSC_FULL_VER)
         cf_print("_MSC_FULL_VER", "%lld", _MSC_FULL_VER + 0);
 #endif
+        cf_print("__has_attribute", "%lld", has_attribute, 4);
+        cf_print("__has_builtin", "%lld", has_builtin, 4);
+        cf_print("__has_cpp_attribute", "%lld", has_cpp_attribute, 4);
+        cf_print("__has_declspec_attribute", "%lld", has_declspec_attribute, 4);
+        cf_print("__has_feature", "%lld", has_feature, 4);
+        cf_print("__has_include", "%lld", has_include, 4);
+        cf_print("__has_warning", "%lld", has_warning, 4);
 
         // architecture
 #if defined(__CHERI__)
@@ -645,14 +709,35 @@ void show_sysinfo(const char *options_var) {
 #if defined(__SIZEOF_LONG_LONG__) && (__SIZEOF_LONG_LONG__ + 0 > 8)
         cf_print("__SIZEOF_LONG_LONG__", "%lld", __SIZEOF_LONG_LONG__ + 0, 3);
 #endif
+        cf_print("__SIZEOF_POINTER__", "%lld", (long long) sizeof(void *), 3);
 #if defined(__SIZEOF_POINTER__) && (__SIZEOF_POINTER__ + 0 > 8)
         cf_print("__SIZEOF_POINTER__", "%lld", __SIZEOF_POINTER__ + 0, 3);
 #endif
+        cf_print("__SIZEOF_SIZE_T__", "%lld", (long long) sizeof(size_t), 3);
+#if (ACC_ABI_BIG_ENDIAN)
+        cf_print("ACC_ABI_BIG_ENDIAN", "%lld", ACC_ABI_BIG_ENDIAN + 0, 4);
+#elif (ACC_ABI_LITTLE_ENDIAN)
+        cf_print("ACC_ABI_LITTLE_ENDIAN", "%lld", ACC_ABI_LITTLE_ENDIAN + 0, 4);
+#else
+#error "ACC_ABI_ENDIAN"
+#endif
 #if defined(UPX_CONFIG_DISABLE_WSTRICT)
-        cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 3);
+        cf_print("UPX_CONFIG_DISABLE_WSTRICT", "%lld", UPX_CONFIG_DISABLE_WSTRICT + 0, 4);
 #endif
 #if defined(UPX_CONFIG_DISABLE_WERROR)
-        cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 3);
+        cf_print("UPX_CONFIG_DISABLE_WERROR", "%lld", UPX_CONFIG_DISABLE_WERROR + 0, 4);
+#endif
+#if defined(DOCTEST_CONFIG_DISABLE)
+        cf_print("DOCTEST_CONFIG_DISABLE", "%lld", DOCTEST_CONFIG_DISABLE + 0, 3);
+#endif
+#if defined(UPX_CONFIG_USE_STABLE_SORT)
+        cf_print("UPX_CONFIG_USE_STABLE_SORT", "%lld", UPX_CONFIG_USE_STABLE_SORT + 0, 3);
+#endif
+#if defined(WITH_XSPAN)
+        cf_print("WITH_XSPAN", "%lld", WITH_XSPAN + 0, 3);
+#endif
+#if defined(XSPAN_CONFIG_ENABLE_DEBUG)
+        cf_print("XSPAN_CONFIG_ENABLE_DEBUG", "%lld", XSPAN_CONFIG_ENABLE_DEBUG + 0, 3);
 #endif
 #if defined(WITH_THREADS)
         cf_print("WITH_THREADS", "%lld", WITH_THREADS + 0);
@@ -672,7 +757,7 @@ void show_sysinfo(const char *options_var) {
                      (int) tmp->tm_min, (int) tmp->tm_sec);
         };
 
-        char s[40];
+        char s[64];
         const time_t t = time(nullptr);
         tm2str(s, sizeof(s), localtime(&t));
         con_fprintf(f, "\n");

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_com.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -105,7 +107,7 @@ void PackCom::addFilter16(int filter_id) {
 }
 
 void PackCom::buildLoader(const Filter *ft) {
-    initLoader(stub_i086_dos16_com, sizeof(stub_i086_dos16_com));
+    initLoader(EM_386, stub_i086_dos16_com, sizeof(stub_i086_dos16_com));
     // clang-format off
     addLoader("COMMAIN1",
               ph.first_offset_found == 1 ? "COMSBBBP" : "",

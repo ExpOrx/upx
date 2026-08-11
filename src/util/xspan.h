@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -47,6 +47,10 @@
 #ifndef XSPAN_CONFIG_ENABLE_SPAN_CONVERSION
 #define XSPAN_CONFIG_ENABLE_SPAN_CONVERSION 1
 #endif
+// Enable DEBUG.
+#ifndef XSPAN_CONFIG_ENABLE_DEBUG
+#define XSPAN_CONFIG_ENABLE_DEBUG 1
+#endif
 
 // actual implementation
 #include "xspan_impl.h"
@@ -87,19 +91,39 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 #define XSPAN_S(type) Span<type>
 
 // create a value
+#if XSPAN_CONFIG_ENABLE_DEBUG
+#define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)(XSpanDebugFileMake(), (first), ##__VA_ARGS__))
+#define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)(XSpanDebugFileMake(), (first), ##__VA_ARGS__))
+#define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)(XSpanDebugFileMake(), (first), ##__VA_ARGS__))
+#else
 #define XSPAN_0_MAKE(type, first, ...) (XSPAN_0(type)((first), ##__VA_ARGS__))
 #define XSPAN_P_MAKE(type, first, ...) (XSPAN_P(type)((first), ##__VA_ARGS__))
 #define XSPAN_S_MAKE(type, first, ...) (XSPAN_S(type)((first), ##__VA_ARGS__))
+#endif
 
 // define a variable
+#if XSPAN_CONFIG_ENABLE_DEBUG
+#define XSPAN_0_VAR(type, var, first, ...)                                                         \
+    XSPAN_0(type) var(XSpanDebugFileMake(), (first), ##__VA_ARGS__)
+#define XSPAN_P_VAR(type, var, first, ...)                                                         \
+    XSPAN_P(type) var(XSpanDebugFileMake(), (first), ##__VA_ARGS__)
+#define XSPAN_S_VAR(type, var, first, ...)                                                         \
+    XSPAN_S(type) var(XSpanDebugFileMake(), (first), ##__VA_ARGS__)
+#else
 #define XSPAN_0_VAR(type, var, first, ...) XSPAN_0(type) var((first), ##__VA_ARGS__)
 #define XSPAN_P_VAR(type, var, first, ...) XSPAN_P(type) var((first), ##__VA_ARGS__)
 #define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var((first), ##__VA_ARGS__)
+#endif
 
 // cast to a different type (creates a new value)
+#if __cplusplus >= 201103L
+#define XSPAN_TYPE_CAST(type, x) ((x).template type_cast<type>())
+#else
 #define XSPAN_TYPE_CAST(type, x) ((x).type_cast<type>())
+#endif
+
 // poison a pointer: point to a non-null invalid address
-#define XSPAN_INVALIDATE(x)      ((x).invalidate())
+#define XSPAN_INVALIDATE(x) ((x).invalidate())
 
 #elif WITH_XSPAN >= 1
 
@@ -121,9 +145,14 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 #define XSPAN_S_VAR(type, var, first, ...) XSPAN_S(type) var((first))
 
 // cast to a different type (creates a new value)
-#define XSPAN_TYPE_CAST(type, x)           ((x).type_cast<type>())
+#if __cplusplus >= 201103L
+#define XSPAN_TYPE_CAST(type, x) ((x).template type_cast<type>())
+#else
+#define XSPAN_TYPE_CAST(type, x) ((x).type_cast<type>())
+#endif
+
 // poison a pointer: point to a non-null invalid address
-#define XSPAN_INVALIDATE(x)                ((x).invalidate())
+#define XSPAN_INVALIDATE(x) ((x).invalidate())
 
 #else // WITH_XSPAN
 
@@ -131,15 +160,15 @@ using XSPAN_NAMESPACE_NAME::raw_index_bytes; // overloaded for all classes
 
 // helper for implicit pointer conversions and MemBuffer overloads
 template <class R, class T>
-inline R *xspan_make_helper__(T *first) noexcept {
+forceinline R *xspan_make_helper__(T *first) noexcept {
     return first; // IMPORTANT: no cast here to detect bad usage
 }
 template <class R>
-inline R *xspan_make_helper__(std::nullptr_t /*first*/) noexcept {
+forceinline R *xspan_make_helper__(std::nullptr_t /*first*/) noexcept {
     return nullptr;
 }
 template <class R>
-inline R *xspan_make_helper__(MemBuffer &mb) noexcept {
+forceinline R *xspan_make_helper__(MemBuffer &mb) noexcept {
     return (R *) membuffer_get_void_ptr(mb);
 }
 
@@ -160,6 +189,7 @@ inline R *xspan_make_helper__(MemBuffer &mb) noexcept {
 
 // cast to a different type (creates a new value)
 #define XSPAN_TYPE_CAST(type, x)           (upx::ptr_static_cast<type *>(x))
+
 // poison a pointer: point to a non-null invalid address
 #define XSPAN_INVALIDATE(x)                (ptr_invalidate_and_poison(x))
 

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -102,11 +102,11 @@ unsigned Packer::optimizeReloc(unsigned relocnum, SPAN_P(byte) relocs, SPAN_S(by
 /*************************************************************************
 // delta-decompress relocations
 // advances 'in'
-// allocates 'out' and returns number of **relocs** written to 'out'
+// allocates 'mb_out' and returns number of **relocs** written to 'mb_out'
 **************************************************************************/
 
 /*static*/
-unsigned Packer::unoptimizeReloc(SPAN_S(const byte) & in, MemBuffer &out, SPAN_P(byte) image,
+unsigned Packer::unoptimizeReloc(SPAN_S(const byte) & in, MemBuffer &mb_out, SPAN_P(byte) image,
                                  unsigned image_size, int bits, bool bswap) {
     assert(bits == 32 || bits == 64);
     mem_size_assert(1, image_size);
@@ -132,8 +132,8 @@ unsigned Packer::unoptimizeReloc(SPAN_S(const byte) & in, MemBuffer &out, SPAN_P
                upx_adler32(image, image_size));
     }
 
-    out.alloc(mem_size(4, relocnum + 1)); // one extra entry
-    SPAN_S_VAR(LE32, relocs, out);
+    mb_out.alloc(mem_size(4, relocnum + 1)); // one extra entry
+    SPAN_S_VAR(LE32, relocs, mb_out);
 
     fix = in;
     unsigned pc = (unsigned) -4;
@@ -163,10 +163,10 @@ unsigned Packer::unoptimizeReloc(SPAN_S(const byte) & in, MemBuffer &out, SPAN_P
         }
     }
     in = fix + 1; // advance
-    assert(relocnum == ptr_udiff_bytes(relocs, raw_bytes(out, 0)) / 4);
+    assert(relocnum == ptr_udiff_bytes(relocs, raw_bytes(mb_out, 0)) / 4);
     if (0) {
         printf("unoptimizeReloc: u_reloc %9u checksum=0x%08x\n", 4 * relocnum,
-               upx_adler32(out, 4 * relocnum));
+               upx_adler32(mb_out, 4 * relocnum));
         printf("unoptimizeReloc: u_image %9u checksum=0x%08x\n", image_size,
                upx_adler32(image, image_size));
     }

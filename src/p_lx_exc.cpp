@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2001-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -34,6 +34,8 @@
 
 #include "file.h"
 #include "filter.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 #include "packer.h"
 #include "p_elf.h"
@@ -293,7 +295,7 @@ PackLinuxI386::buildLinuxLoader(
     Filter const *ft
 )
 {
-    initLoader(proto, szproto);
+    initLoader(EM_386, proto, szproto);
 
     unsigned fold_hdrlen = 0;
   if (0 < szfold) {

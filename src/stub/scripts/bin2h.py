@@ -1,11 +1,11 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 ## vim:set ts=4 sw=4 et: -*- coding: utf-8 -*-
 #
 #  bin2h.py --
 #
 #  This file is part of the UPX executable compressor.
 #
-#  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+#  Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #  All Rights Reserved.
 #
 #  UPX and the UCL library are free software; you can redistribute them
@@ -45,13 +45,13 @@ class opts:
 # ************************************************************************/
 
 def w_header_c(w, ifile, ofile, n):
-    w("/* %s\n   created from %s, %d (0x%x) bytes\n" % (os.path.basename(ofile), os.path.basename(ifile), n, n))
+    w(("/* %s\n   created from %s, %d (0x%x) bytes\n" % (os.path.basename(ofile), os.path.basename(ifile), n, n)).encode())
     w("""\n\
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -74,7 +74,7 @@ def w_header_c(w, ifile, ofile, n):
 
    John F. Reiser
    <jreiser@users.sourceforge.net>
- */\n\n""")
+ */\n\n""".encode())
 
 
 # /***********************************************************************
@@ -87,11 +87,11 @@ class DataWriter:
         self.pos = None
 
     def w_bol(self, pos):
-        self.w("/* 0x%04x */ " % (pos))
+        self.w(("/* 0x%04x */ " % (pos)).encode())
         self.pos = pos
     def w_eol(self, fill=""):
         if self.pos is not None:
-            self.w(fill.rstrip() + "\n")
+            self.w((fill.rstrip() + "\n").encode())
 
 
 class DataWriter_c(DataWriter):
@@ -101,8 +101,8 @@ class DataWriter_c(DataWriter):
             if i & 15 == 0:
                 self.w_eol()
                 self.w_bol(i)
-            w("%3d" % ord(data[i]))
-            if i != n - 1: w(",")
+            w(("%3d" % data[i]).encode())
+            if i != n - 1: w(",".encode())
         self.w_eol()
 
 
@@ -113,10 +113,10 @@ class DataWriter_gas(DataWriter):
             if i & 15 == 0:
                 self.w_eol()
                 self.w_bol(i)
-                w(".byte ")
+                w(".byte ".encode())
             else:
-                w(",")
-            w("%3d" % ord(data[i]))
+                w(",".encode())
+            w(("%3d" % data[i]).encode())
         self.w_eol()
 
 
@@ -128,12 +128,12 @@ class _DataWriter_gas_u32(DataWriter):
             if i & 15 == 0:
                 self.w_eol()
                 self.w_bol(i)
-                w(".int ")
+                w(".int ".encode())
             else:
-                w(",")
+                w(",".encode())
             v = struct.unpack(self.DECODE, data[i:i+4])
             assert len(v) == 1, v
-            w("0x%08x" % (v[0] & 0xffffffffL))
+            w(("0x%08x" % (v[0] & 0xffffffff)).encode())
         self.w_eol()
 
 class DataWriter_gas_be32(_DataWriter_gas_u32):
@@ -148,7 +148,7 @@ class DataWriter_nasm(DataWriter):
     def w_eol(self, fill=""):
         if self.pos is not None:
             self.w(fill)
-            self.w("   ; 0x%04x\n" % (self.pos))
+            self.w(("   ; 0x%04x\n" % (self.pos)).encode())
 
     def w_data(self, data):
         w, n = self.w, len(data)
@@ -156,10 +156,10 @@ class DataWriter_nasm(DataWriter):
             if i & 15 == 0:
                 self.w_eol()
                 self.w_bol(i)
-                w("db ")
+                w("db ".encode())
             else:
-                w(",")
-            w("%3d" % ord(data[i]))
+                w(",".encode())
+            w(("%3d" % ord(data[i])).encode())
         nn = ((n + 15) & ~15) - n
         self.w_eol(" " * 4 * nn)
 
@@ -169,21 +169,21 @@ class DataWriter_nasm(DataWriter):
 # ************************************************************************/
 
 def w_checksum_c(w, s, data):
-    w("#define %s_SIZE    %d\n"     % (s, len(data)))
-    w("#define %s_ADLER32 0x%08x\n" % (s, 0xffffffffL & zlib.adler32(data)))
-    w("#define %s_CRC32   0x%08x\n" % (s, 0xffffffffL & zlib.crc32(data)))
-    w("\n")
+    w(("#define %s_SIZE    %d\n"     % (s, len(data))).encode())
+    w(("#define %s_ADLER32 0x%08x\n" % (s, 0xffffffff & zlib.adler32(data))).encode())
+    w(("#define %s_CRC32   0x%08x\n" % (s, 0xffffffff & zlib.crc32(data))).encode())
+    w("\n".encode())
 
 
 def write_stub(w, odata, method_index, methods):
     method = methods[method_index]
     if len(methods) > 1:
         if method_index == 0:
-            w("#if (%s == %d)\n\n" % (opts.mname, method))
+            w(("#if (%s == %d)\n\n" % (opts.mname, method)).encode())
         elif method_index < len(methods) - 1:
-            w("\n#elif (%s == %d)\n\n" % (opts.mname, method))
+            w(("\n#elif (%s == %d)\n\n" % (opts.mname, method)).encode())
         else:
-            w("\n#else\n\n")
+            w("\n#else\n\n".encode())
 
     if opts.ident:
         if opts.mode == "c":
@@ -193,8 +193,8 @@ def write_stub(w, odata, method_index, methods):
                 #w("#if defined(__ELF__)\n")
                 #w('__attribute__((__section__("upx_stubs")))\n')
                 #w("#endif\n")
-                w("ATTRIBUTE_FOR_STUB(%s)\n" % (opts.ident))
-            w("unsigned char %s[%d] = {\n" % (opts.ident, len(odata)))
+                w(("ATTRIBUTE_FOR_STUB(%s)\n" % (opts.ident)).encode())
+            w(("unsigned char %s[%d] = {\n" % (opts.ident, len(odata))).encode())
     if opts.mode == "c":
         DataWriter_c(w).w_data(odata)
     elif opts.mode == "gas":
@@ -209,11 +209,11 @@ def write_stub(w, odata, method_index, methods):
         assert 0, ("invalid mode", opts.mode)
     if opts.ident:
         if opts.mode == "c":
-            w("};\n")
+            w("};\n".encode())
 
     if len(methods) > 1:
         if method_index == len(methods) - 1:
-            w("\n#endif\n")
+            w("\n#endif\n".encode())
 
 
 # /***********************************************************************
@@ -293,10 +293,10 @@ def main(argv):
     # check file size
     st = os.stat(ifile)
     if 1 and st.st_size <= 0:
-        print >> sys.stderr, "%s: ERROR: empty file" % (ifile)
+        sys.stderr.write("%s: ERROR: empty file\n" % (ifile))
         sys.exit(1)
     if 1 and st.st_size > 128*1024:
-        print >> sys.stderr, "%s: ERROR: file is too big (%d bytes)" % (ifile, st.st_size)
+        sys.stderr.write("%s: ERROR: file is too big (%d bytes)\n" % (ifile, st.st_size))
         sys.exit(1)
 
     # read ifile
@@ -321,19 +321,22 @@ def main(argv):
     # compress stubs
     # (process in reverse order so that incompressible do not get sorted first)
     mdata, mdata_odata = [], {}
-    assert len(opts.methods) >= 1
-    r_methods = opts.methods[:]
-    r_methods.reverse()
+    ### FIXME  assert len(opts.methods) >= 1
+    ### r_methods = opts.methods[:]
+    ### r_methods.reverse()
+    r_methods = [];
+    for m in opts.methods:
+        r_methods.insert(0, m)
     for method in r_methods:
         method, odata = compress_stub(method, idata)
-        if mdata_odata.has_key(method):
+        if method in mdata_odata:
             assert mdata_odata[method] == odata
         else:
             mdata_odata[method] = odata
             mdata.append(method)
     assert len(mdata) >= 1
     mdata.reverse()
-    ##print opts.methods, [(i, len(mdata_odata[i])) for i in mdata]
+    ##print (opts.methods, [(i, len(mdata_odata[i])) for i in mdata])
 
     # write ofile
     if opts.dry_run:
@@ -349,7 +352,7 @@ def main(argv):
     if opts.mode == "c":
         if opts.verbose >= 0:
             w_header_c(w, ifile, ofile, len(idata))
-        w("/* clang" + "-format" + " off */\n\n")
+        w(("/* clang" + "-format" + " off */\n\n").encode())
     for i in range(len(mdata)):
         write_stub(w, mdata_odata[mdata[i]], i, mdata)
     if ofp:

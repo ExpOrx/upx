@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -98,7 +98,7 @@ static constexpr int get_open_flags(OpenMode om) noexcept {
 }
 
 // set file time of an open file
-static void set_fd_timestamp(int fd, const XStat *xst) noexcept {
+static noinline void set_fd_timestamp(int fd, const XStat *xst) noexcept {
 #if USE_SETFILETIME
     BOOL r = SetFileTime((HANDLE) _get_osfhandle(fd), nullptr, &xst->ft_atime, &xst->ft_mtime);
     IGNORE_ERROR(r);
@@ -118,8 +118,8 @@ static void set_fd_timestamp(int fd, const XStat *xst) noexcept {
     UNUSED(xst);
 }
 
-static void copy_file_contents(const char *iname, const char *oname, OpenMode om,
-                               const XStat *oname_timestamp) may_throw {
+static noinline void copy_file_contents(const char *iname, const char *oname, OpenMode om,
+                                        const XStat *oname_timestamp) may_throw {
     InputFile fi;
     fi.sopen(iname, get_open_flags(RO_MUST_EXIST), SH_DENYWR);
     fi.seek(0, SEEK_SET);
@@ -142,8 +142,9 @@ static void copy_file_contents(const char *iname, const char *oname, OpenMode om
     fo.closex();
 }
 
-static void copy_file_attributes(const XStat *xst, const char *oname, bool preserve_mode,
-                                 bool preserve_ownership, bool preserve_timestamp) noexcept {
+static noinline void copy_file_attributes(const XStat *xst, const char *oname, bool preserve_mode,
+                                          bool preserve_ownership,
+                                          bool preserve_timestamp) noexcept {
     const struct stat *const st = &xst->st;
     // copy time stamp
     if (preserve_timestamp) {
@@ -329,19 +330,21 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
     }
 
     // handle command - actual work starts HERE
-    PackMaster pm(&fi, opt);
-    if (opt->cmd == CMD_COMPRESS)
-        pm.pack(&fo);
-    else if (opt->cmd == CMD_DECOMPRESS)
-        pm.unpack(&fo);
-    else if (opt->cmd == CMD_TEST)
-        pm.test();
-    else if (opt->cmd == CMD_LIST)
-        pm.list();
-    else if (opt->cmd == CMD_FILEINFO)
-        pm.fileInfo();
-    else
-        throwInternalError("invalid command");
+    {
+        PackMaster pm(&fi, opt);
+        if (opt->cmd == CMD_COMPRESS)
+            pm.pack(&fo);
+        else if (opt->cmd == CMD_DECOMPRESS)
+            pm.unpack(&fo);
+        else if (opt->cmd == CMD_TEST)
+            pm.test();
+        else if (opt->cmd == CMD_LIST)
+            pm.list();
+        else if (opt->cmd == CMD_FILEINFO)
+            pm.fileInfo();
+        else
+            throwInternalError("invalid command");
+    }
 
     // copy time stamp
     if (oname[0] && opt->preserve_timestamp && fo.isOpen())
@@ -399,7 +402,7 @@ void do_one_file(const char *const iname, char *const oname) may_throw {
 // process all files from the commandline
 **************************************************************************/
 
-static void unlink_ofile(char *oname) noexcept {
+static noinline void unlink_ofile(char *oname) noexcept {
     if (oname && oname[0]) {
         (void) FileBase::unlink_noexcept(oname); // IGNORE_ERROR
         oname[0] = 0;                            // done with oname
@@ -468,12 +471,14 @@ int do_files(int i, int argc, char *argv[]) may_throw {
         UiPacker::uiPackTotal();
     else if (opt->cmd == CMD_DECOMPRESS)
         UiPacker::uiUnpackTotal();
-    else if (opt->cmd == CMD_LIST)
-        UiPacker::uiListTotal();
     else if (opt->cmd == CMD_TEST)
         UiPacker::uiTestTotal();
+    else if (opt->cmd == CMD_LIST)
+        UiPacker::uiListTotal();
     else if (opt->cmd == CMD_FILEINFO)
         UiPacker::uiFileInfoTotal();
+    else
+        throwInternalError("invalid command");
     return 0;
 }
 

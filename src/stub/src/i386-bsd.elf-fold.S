@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 2000-2025 John F. Reiser
+;  Copyright (C) John F. Reiser
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -93,10 +93,9 @@ L50:
         mov edi, esp
         call do_auxv  // move; fill new auxv slots with AT_IGNORE
 
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
-        sub esp, MAX_ELF_HDR_32 + OVERHEAD  // alloca
+        sub esp, MAX_ELF_HDR_32  // alloca
         push ebx  // start of unmap region (&Elf32_Ehdr of this stub)
 
 // Cannot pre-round .p_memsz because kernel requires PF_W to setup .bss,
@@ -127,7 +126,7 @@ L53:
         add esp, (8 +1)*4  // remove 8 params from pusha, also dynbase
         pop ecx  // end of unmap region
         pop ebx  // start of unmap region (&Elf32_Ehdr of this stub)
-        add esp, MAX_ELF_HDR_32 + OVERHEAD  // un-alloca
+        add esp, MAX_ELF_HDR_32  // un-alloca
         pop edx  // bread crumb size in pages
         shl edx,12
         add ebx,edx  // start of unmap region

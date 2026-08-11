@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -34,11 +34,9 @@ class PackerBase;
 //
 **************************************************************************/
 
-class UiPacker final {
+class UiPacker /*not_final*/ {
 public:
-    explicit UiPacker(const PackerBase *);
-
-public:
+    explicit noinline UiPacker(const PackerBase *);
     virtual ~UiPacker() noexcept;
 
     static void uiConfirmUpdate();
@@ -72,7 +70,6 @@ protected:
     static void __acc_cdecl progress_callback(upx_callback_t *, unsigned, unsigned);
     virtual void doCallback(unsigned isize, unsigned osize);
 
-protected:
     virtual void uiUpdate(upx_off_t fc_len = -1, upx_off_t fu_len = -1);
 
 public:

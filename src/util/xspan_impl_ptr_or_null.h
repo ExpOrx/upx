@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -53,28 +53,53 @@ private:
 #include "xspan_impl_common.h"
 public:
     // constructors from pointers
-    CSelf(pointer first) : ptr(first), base(nullptr), size_in_bytes(0) { assertInvariants(); }
+    CSelf(pointer first) : XSPAN_DEBUG_NULL ptr(first), base(nullptr), size_in_bytes(0) {
+        assertInvariants();
+    }
+    CSelf(XSPAN_DEBUG_ARGS pointer first)
+        : XSPAN_DEBUG_IMPL ptr(first), base(nullptr), size_in_bytes(0) {
+        assertInvariants();
+    }
 
     // constructors
     CSelf(const Self &other)
-        : ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        : XSPAN_DEBUG_OTHER ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        assertInvariants();
+    }
+    CSelf(XSPAN_DEBUG_ARGS const Self &other)
+        : XSPAN_DEBUG_IMPL ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
         assertInvariants();
     }
     template <class U>
     CSelf(const CSelf<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
-        : ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        : XSPAN_DEBUG_OTHER ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        assertInvariants();
+    }
+    template <class U>
+    CSelf(XSPAN_DEBUG_ARGS const CSelf<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
+        : XSPAN_DEBUG_IMPL ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
         assertInvariants();
     }
 
     // constructors from Span friends
     template <class U>
     CSelf(const PtrOrSpan<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
-        : ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        : XSPAN_DEBUG_OTHER ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        assertInvariants();
+    }
+    template <class U>
+    CSelf(XSPAN_DEBUG_ARGS const PtrOrSpan<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
+        : XSPAN_DEBUG_IMPL ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
         assertInvariants();
     }
     template <class U>
     CSelf(const Span<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
-        : ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        : XSPAN_DEBUG_OTHER ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
+        assertInvariants();
+    }
+    template <class U>
+    CSelf(XSPAN_DEBUG_ARGS const Span<U> &other, XSPAN_REQUIRES_CONVERTIBLE_A)
+        : XSPAN_DEBUG_IMPL ptr(other.ptr), base(other.base), size_in_bytes(other.size_in_bytes) {
         assertInvariants();
     }
 
@@ -91,7 +116,12 @@ public:
     }
 
     // nullptr
-    forceinline CSelf(std::nullptr_t) noexcept : ptr(nullptr), base(nullptr), size_in_bytes(0) {}
+    forceinline CSelf(std::nullptr_t) noexcept : XSPAN_DEBUG_NULL ptr(nullptr),
+                                                 base(nullptr),
+                                                 size_in_bytes(0) {}
+    forceinline CSelf(XSPAN_DEBUG_ARGS std::nullptr_t) noexcept : XSPAN_DEBUG_IMPL ptr(nullptr),
+                                                                  base(nullptr),
+                                                                  size_in_bytes(0) {}
     forceinline Self &operator=(std::nullptr_t) noexcept {
         ptr = nullptr;
         return *this;
@@ -110,7 +140,7 @@ inline typename PtrOrSpanOrNull<T>::pointer raw_index_bytes(const PtrOrSpanOrNul
                                                             size_t index, size_t size_in_bytes) {
     typedef typename PtrOrSpanOrNull<T>::element_type element_type;
     if very_unlikely (a.raw_ptr() == nullptr)
-        throwInternalError("raw_index_bytes unexpected NULL ptr");
+        throwCantPack("raw_index_bytes unexpected NULL ptr");
     return a.raw_bytes(mem_size(sizeof(element_type), index, size_in_bytes)) + index;
 }
 

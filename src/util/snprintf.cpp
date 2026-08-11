@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,7 +31,20 @@
 // UPX version of string functions, with assertions and sane limits
 **************************************************************************/
 
-upx_rsize_t upx_safe_strlen(const char *s) {
+char *upx_safe_strdup_noexcept(const char *s) noexcept {
+#undef strlen
+    assert_noexcept(s != nullptr);
+    size_t len = strlen(s);
+    assert_noexcept(len < UPX_RSIZE_MAX_STR);
+    char *p = (char *) ::malloc(len + 1);
+    assert_noexcept(p != nullptr);
+    if (p != nullptr)
+        memcpy(p, s, len + 1);
+    return p;
+#define strlen upx_safe_strlen
+}
+
+upx_rsize_t upx_safe_strlen(const char *s) may_throw {
 #undef strlen
     assert(s != nullptr);
     size_t len = strlen(s);
@@ -49,7 +62,7 @@ upx_rsize_t upx_safe_strlen_noexcept(const char *s) noexcept {
 #define strlen upx_safe_strlen
 }
 
-int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_list ap) {
+int upx_safe_vsnprintf(char *str, upx_rsize_t max_size, const char *format, va_list ap) may_throw {
 #undef vsnprintf
     size_t size;
 
@@ -106,7 +119,7 @@ int upx_safe_vsnprintf_noexcept(char *str, upx_rsize_t max_size, const char *for
 #define vsnprintf upx_safe_vsnprintf
 }
 
-int upx_safe_snprintf(char *str, upx_rsize_t max_size, const char *format, ...) {
+int upx_safe_snprintf(char *str, upx_rsize_t max_size, const char *format, ...) may_throw {
     va_list ap;
     int len;
 
@@ -116,7 +129,17 @@ int upx_safe_snprintf(char *str, upx_rsize_t max_size, const char *format, ...) 
     return len;
 }
 
-int upx_safe_vasprintf(char **ptr, const char *format, va_list ap) {
+int upx_safe_snprintf_noexcept(char *str, upx_rsize_t max_size, const char *format, ...) noexcept {
+    va_list ap;
+    int len;
+
+    va_start(ap, format);
+    len = upx_safe_vsnprintf_noexcept(str, max_size, format, ap);
+    va_end(ap);
+    return len;
+}
+
+int upx_safe_vasprintf(char **ptr, const char *format, va_list ap) may_throw {
     int len;
 
     assert(ptr != nullptr);
@@ -138,7 +161,7 @@ int upx_safe_vasprintf(char **ptr, const char *format, va_list ap) {
     return len;
 }
 
-int upx_safe_asprintf(char **ptr, const char *format, ...) {
+int upx_safe_asprintf(char **ptr, const char *format, ...) may_throw {
     va_list ap;
     int len;
 
@@ -148,7 +171,7 @@ int upx_safe_asprintf(char **ptr, const char *format, ...) {
     return len;
 }
 
-char *upx_safe_xprintf(const char *format, ...) {
+char *upx_safe_xprintf(const char *format, ...) may_throw {
     char *ptr = nullptr;
     va_list ap;
     int len;

@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2023 John F. Reiser
+   Copyright (C) John F. Reiser
    All Rights Reserved.
  */
 
@@ -30,7 +30,7 @@ extern void my_bkpt(void const *, ...);
 #define ANDROID_FRIEND 0
 #define addr_string(string) ({ \
     char const *str; \
-    asm(".set noreorder; bal 0f; nop; .asciz \"" string "\"; .balign 4\n0: move %0,$31; .set reorder" \
+    asm(".set noreorder; bal 0f; move %0,$31; .set reorder; .asciz \"" string "\"; .balign 4\n0:\n" \
 /*out*/ : "=r"(str) \
 /* in*/ : \
 /*und*/ : "ra"); \
@@ -74,12 +74,36 @@ extern void my_bkpt(void const *, ...);
 /*und*/ : "x30"); \
     str; \
 })
+#elif defined(__riscv) //}{
+#define ANDROID_FRIEND 0
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("jal %0,0f; .string \"" string "\"; .balign 4; 0:" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : ); \
+    str; \
+})
 #else  //}{
 #define ANDROID_FRIEND 0
 #error  addr_string
 #endif  //}
 
 #include "include/linux.h"  // syscall decls; i386 inlines via "int 0x80"
+
+#if !DEBUG //{
+#define DPRINTF(fmt, args...) /*empty*/
+#else  //}{
+// DPRINTF is defined as an expression using "({ ... })"
+// so that DPRINTF can be invoked inside an expression,
+// and then followed by a comma to ignore the return value.
+// The only complication is that percent and backslash
+// must be doubled in the format string, because the format
+// string is processed twice: once at compile-time by 'asm'
+// to produce the assembled value, and once at runtime to use it.
+#define DPRINTF(fmt, args...) ({ dprintf(addr_string(fmt), args); })
+static int dprintf(char const *fmt, ...); // forward
+#endif  //} DEBUG
 
 #define MFD_EXEC 0x10
 //#define O_RDWR 2
@@ -159,5 +183,7 @@ unsigned long upx_mmap_and_fd_linux( // returns (mapped_addr | (1+ fd))
     if (page_mask <= (unsigned long)ptr) {
         return (unsigned long)ptr;  // -errno
     }
+    DPRINTF("upx_mmap_and_fd_linux= %%p\n",
+           (unsigned long)ptr + (1+ (unsigned)fd));
     return (unsigned long)ptr + (1+ (unsigned)fd);
 }

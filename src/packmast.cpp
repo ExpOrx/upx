@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,6 +25,8 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
+// dispatch to a concrete subclass of class PackerBase; see work.cpp
+
 #include "conf.h"
 #include "file.h"
 #include "packmast.h"
@@ -36,6 +38,7 @@
 #include "p_unix.h"
 
 #include "p_com.h"
+#include "p_cpm86.h"
 #include "p_djgpp2.h"
 #include "p_exe.h"
 #include "p_lx_elf.h"
@@ -74,6 +77,7 @@ PackMaster::PackMaster(InputFile *f, Options *o) noexcept : fi(f) {
 
 PackMaster::~PackMaster() noexcept {
     upx::owner_delete(packer);
+    assert_noexcept(packer == nullptr);
     // restore global options
     if (saved_opt != nullptr) {
 #if WITH_THREADS
@@ -86,10 +90,12 @@ PackMaster::~PackMaster() noexcept {
 }
 
 /*************************************************************************
-//
+// try_can_pack and try_can_unpack
 **************************************************************************/
 
 static noinline tribool try_can_pack(PackerBase *pb, void *user) may_throw {
+    assert_noexcept(pb != nullptr);
+    assert_noexcept(user != nullptr);
     InputFile *f = (InputFile *) user;
     try {
         pb->initPackHeader();
@@ -110,6 +116,8 @@ static noinline tribool try_can_pack(PackerBase *pb, void *user) may_throw {
 }
 
 static noinline tribool try_can_unpack(PackerBase *pb, void *user) may_throw {
+    assert_noexcept(pb != nullptr);
+    assert_noexcept(user != nullptr);
     InputFile *f = (InputFile *) user;
     try {
         pb->initPackHeader();
@@ -128,12 +136,14 @@ static noinline tribool try_can_unpack(PackerBase *pb, void *user) may_throw {
 }
 
 /*************************************************************************
-//
+// visitAllPackers
 **************************************************************************/
 
 /*static*/
 PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const Options *o,
                                         void *user) may_throw {
+    assert_noexcept(o != nullptr);
+
 #define VISIT(Klass)                                                                               \
     do {                                                                                           \
         static_assert(std::is_class_v<Klass>);                                                     \
@@ -162,7 +172,7 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
         VISIT(PackWcle);
         // Windows
         // VISIT(PackW64PeArm64EC); // NOT YET IMPLEMENTED
-        // VISIT(PackW64PeArm64); // NOT YET IMPLEMENTED
+        VISIT(PackW64PeArm64);
         VISIT(PackW64PeAmd64);
         VISIT(PackW32PeI386);
         VISIT(PackWinCeArm);
@@ -199,6 +209,7 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
         VISIT(PackLinuxElf32armLe);
         VISIT(PackLinuxElf32armBe);
         VISIT(PackLinuxElf64arm);
+        VISIT(PackLinuxElf64riscv64);
         VISIT(PackLinuxElf32ppc);
         VISIT(PackLinuxElf64ppc);
         VISIT(PackLinuxElf64ppcle);
@@ -210,7 +221,9 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
     VISIT(PackMachFat);   // cafebabe conflict
     VISIT(PackLinuxI386); // cafebabe conflict
 
+    //
     // Mach (Darwin / macOS)
+    //
     VISIT(PackDylibAMD64);
     VISIT(PackMachPPC32); // TODO: this works with upx 3.91..3.94 but got broken in 3.95; FIXME
     VISIT(PackMachI386);
@@ -227,10 +240,11 @@ PackerBase *PackMaster::visitAllPackers(visit_func_t func, InputFile *f, const O
     //
     // misc
     //
-    VISIT(PackTos); // atari/tos
-    VISIT(PackPs1); // ps1/exe
-    VISIT(PackSys); // dos/sys
-    VISIT(PackCom); // dos/com
+    VISIT(PackTos);   // atari/tos
+    VISIT(PackPs1);   // ps1/exe
+    VISIT(PackSys);   // dos/sys
+    VISIT(PackCom);   // dos/com
+    VISIT(PackCpm86); // cpm86/cmd
 
     return nullptr;
 #undef VISIT
@@ -284,7 +298,7 @@ void PackMaster::fileInfo() may_throw {
     if (!packer)
         packer = visitAllPackers(try_can_pack, fi, opt, fi);
     if (!packer)
-        throwUnknownExecutableFormat(nullptr, 1); // make a warning here
+        throwUnknownExecutableFormat(nullptr, true); // make a warning here
     packer->doFileInfo();
 }
 

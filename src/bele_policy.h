@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -135,7 +135,7 @@ struct BEPolicy final
     S u32_compare_signed(const void *a, const void *b) C { return be32_compare_signed(a, b); }
     S u64_compare_signed(const void *a, const void *b) C { return be64_compare_signed(a, b); }
 
-    static void compileTimeAssertions() {
+    static void compileTimeAssertions() noexcept {
         COMPILE_TIME_ASSERT(sizeof(U16) == 2)
         COMPILE_TIME_ASSERT(sizeof(U32) == 4)
         COMPILE_TIME_ASSERT(sizeof(U64) == 8)
@@ -194,7 +194,7 @@ struct LEPolicy final
     S u32_compare_signed(const void *a, const void *b) C { return le32_compare_signed(a, b); }
     S u64_compare_signed(const void *a, const void *b) C { return le64_compare_signed(a, b); }
 
-    static void compileTimeAssertions() {
+    static void compileTimeAssertions() noexcept {
         COMPILE_TIME_ASSERT(sizeof(U16) == 2)
         COMPILE_TIME_ASSERT(sizeof(U32) == 4)
         COMPILE_TIME_ASSERT(sizeof(U64) == 8)
@@ -210,7 +210,7 @@ private:
     UPX_CXX_DISABLE_NEW_DELETE(LEPolicy)
 };
 
-// Native Endianness policy (aka host policy)
+// NE - Native Endianness policy (aka Host Policy)
 #if (ACC_ABI_BIG_ENDIAN)
 typedef BEPolicy NEPolicy;
 typedef BEPolicy HostPolicy;

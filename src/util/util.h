@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -35,12 +35,15 @@
 
 inline bool mem_size_valid_bytes(upx_uint64_t bytes) noexcept { return bytes <= UPX_RSIZE_MAX; }
 
-bool mem_size_valid(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1 = 0,
-                    upx_uint64_t extra2 = 0) noexcept;
+noinline bool mem_size_valid(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1 = 0,
+                             upx_uint64_t extra2 = 0) noexcept;
 
 // will throw on invalid size
-upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1,
-                     upx_uint64_t extra2 = 0) may_throw;
+noinline upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t extra1,
+                              upx_uint64_t extra2 = 0) may_throw;
+
+noinline upx_rsize_t mem_size_ptr(const void *ptr, upx_uint64_t element_size, upx_uint64_t n,
+                                  upx_uint64_t extra1 = 0, upx_uint64_t extra2 = 0) may_throw;
 
 //
 // inline fast paths:
@@ -48,7 +51,7 @@ upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n, upx_uint64_t ext
 
 // will throw on invalid size
 inline upx_rsize_t mem_size(upx_uint64_t element_size, upx_uint64_t n) may_throw {
-    upx_uint64_t bytes = element_size * n;
+    const upx_uint64_t bytes = element_size * n;
     if very_unlikely (element_size == 0 || element_size > UPX_RSIZE_MAX || n > UPX_RSIZE_MAX ||
                       bytes > UPX_RSIZE_MAX)
         return mem_size(element_size, n, 0, 0); // this will throw
@@ -65,18 +68,20 @@ inline upx_rsize_t mem_size_get_n(upx_uint64_t element_size, upx_uint64_t n) may
 inline void mem_size_assert(upx_uint64_t element_size, upx_uint64_t n) may_throw {
     (void) mem_size(element_size, n); // assert size
 }
+inline void mem_size_assert_noexcept(upx_uint64_t element_size, upx_uint64_t n) noexcept {
+    assert_noexcept(mem_size_valid(element_size, n)); // assert size
+}
 
 // "new" with asserted size; will throw on invalid size
-#if DEBUG
 template <class T>
-T *NewArray(upx_uint64_t n) may_throw {
+inline T *NewT(upx_uint64_t n) may_throw {
     COMPILE_TIME_ASSERT(std::is_standard_layout<T>::value)
     COMPILE_TIME_ASSERT(std::is_trivially_copyable<T>::value)
     COMPILE_TIME_ASSERT(std::is_trivially_default_constructible<T>::value)
-    upx_rsize_t bytes = mem_size(sizeof(T), n); // assert size
+    const upx_rsize_t bytes = mem_size(sizeof(T), n); // assert size
     T *array = new T[size_t(n)];
 #if !defined(__SANITIZE_MEMORY__)
-    if (array != nullptr && bytes > 0) {
+    if likely (array != nullptr && bytes > 0) {
         memset(array, 0xfb, bytes); // NOLINT(bugprone-multi-level-implicit-pointer-conversion)
         (void) VALGRIND_MAKE_MEM_UNDEFINED(array, bytes);
     }
@@ -84,10 +89,24 @@ T *NewArray(upx_uint64_t n) may_throw {
     UNUSED(bytes);
     return array;
 }
-#define New(type, n) (NewArray<type>((n)))
+#if DEBUG || 1
+#define New(type, n) (NewT<type>((n)))
 #else
 #define New(type, n) new type[mem_size_get_n(sizeof(type), (n))]
 #endif
+
+template <class T>
+inline T *New0T(upx_uint64_t n) may_throw {
+    COMPILE_TIME_ASSERT(std::is_standard_layout<T>::value)
+    COMPILE_TIME_ASSERT(std::is_trivially_copyable<T>::value)
+    COMPILE_TIME_ASSERT(std::is_trivially_default_constructible<T>::value)
+    const upx_rsize_t bytes = mem_size(sizeof(T), n); // assert size
+    T *array = new T[size_t(n)];
+    if likely (array != nullptr && bytes > 0)
+        memset(array, 0, bytes); // NOLINT(bugprone-multi-level-implicit-pointer-conversion)
+    return array;
+}
+#define New0(type, n) (New0T<type>((n)))
 
 /*************************************************************************
 // ptr util
@@ -119,20 +138,33 @@ forceinline bool ptr_is_aligned(const void *p, size_t alignment) noexcept {
     return (ptr_get_address(p) & (alignment - 1)) == 0;
 }
 
+template <class T>
+forceinline T *ptr_align_down(T *p, size_t alignment) noexcept {
+    typedef std::conditional_t<std::is_const_v<T>, const char *, char *> CharPtr;
+    return upx::ptr_static_cast<T *>(upx::ptr_static_cast<CharPtr>(p) -
+                                     size_t(ptr_get_address(p) & (alignment - 1)));
+}
+template <class T>
+forceinline T *ptr_align_up(T *p, size_t alignment) noexcept {
+    typedef std::conditional_t<std::is_const_v<T>, const char *, char *> CharPtr;
+    return upx::ptr_static_cast<T *>(
+        upx::ptr_static_cast<CharPtr>(p) +
+        size_t((upx_ptraddr_t(0) - ptr_get_address(p)) & (alignment - 1)));
+}
+
 // ptrdiff_t with nullptr checks and asserted size; will throw on failure
 // NOTE: returns size_in_bytes, not number of elements!
-int ptr_diff_bytes(const void *a, const void *b) may_throw;
-unsigned ptr_udiff_bytes(const void *a, const void *b) may_throw; // asserts a >= b
+noinline int ptr_diff_bytes(const void *a, const void *b) may_throw;
+noinline unsigned ptr_udiff_bytes(const void *a, const void *b) may_throw; // asserts a >= b
 
 // short names "ptr_diff" and "ptr_udiff" for types with sizeof(X) == 1
 template <class T, class U>
-inline typename std::enable_if<sizeof(T) == 1 && sizeof(U) == 1, int>::type ptr_diff(const T *a,
-                                                                                     const U *b)
-    may_throw {
+forceinline typename std::enable_if<sizeof(T) == 1 && sizeof(U) == 1, int>::type
+ptr_diff(const T *a, const U *b) may_throw {
     return ptr_diff_bytes(a, b);
 }
 template <class T, class U>
-inline typename std::enable_if<sizeof(T) == 1 && sizeof(U) == 1, unsigned>::type
+forceinline typename std::enable_if<sizeof(T) == 1 && sizeof(U) == 1, unsigned>::type
 ptr_udiff(const T *a, const U *b) may_throw {
     return ptr_udiff_bytes(a, b);
 }
@@ -181,8 +213,8 @@ noinline const char *upx_getenv(const char *envvar) noexcept;
 
 noinline void upx_memswap(void *a, void *b, size_t bytes) noexcept;
 
-noinline void upx_rand_init(void) noexcept;
-noinline int upx_rand(void) noexcept;
+noinline void upx_rand_init() noexcept;
+noinline int upx_rand() noexcept;
 
 typedef int(__acc_cdecl_qsort *upx_compare_func_t)(const void *, const void *);
 typedef void (*upx_sort_func_t)(void *array, size_t n, size_t element_size, upx_compare_func_t);
@@ -229,7 +261,7 @@ bool maketempname(char *ofilename, size_t size, const char *ifilename, const cha
                   bool force = true);
 bool makebakname(char *ofilename, size_t size, const char *ifilename, bool force = true);
 
-bool is_envvar_true(const char *envvar, const char *alternate_name = nullptr) noexcept;
+noinline bool is_envvar_true(const char *envvar, const char *alternate_name = nullptr) noexcept;
 
 unsigned get_ratio(upx_uint64_t u_len, upx_uint64_t c_len);
 bool set_method_name(char *buf, size_t size, int method, int level);

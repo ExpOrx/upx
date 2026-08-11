@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -26,11 +26,13 @@
  */
 
 #include "conf.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
-static unsigned hex(uchar c) { return (c & 0xf) + (c > '9' ? 9 : 0); }
+static inline unsigned hex(uchar c) noexcept { return (c & 0xf) + (c > '9' ? 9 : 0); }
 
-static bool grow_capacity(unsigned size, unsigned *capacity) {
+static bool grow_capacity(unsigned size, unsigned *capacity) noexcept {
     if (size < *capacity)
         return false;
     if (*capacity == 0)
@@ -41,16 +43,16 @@ static bool grow_capacity(unsigned size, unsigned *capacity) {
 }
 
 template <class T>
-static T **realloc_array(T **array, size_t capacity) may_throw {
+static noinline T **realloc_array(T **array, size_t capacity) may_throw {
     assert_noexcept(capacity > 0);
     // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-    void *p = realloc(array, mem_size(sizeof(T *), capacity));
+    void *p = ::realloc(array, mem_size(sizeof(T *), capacity));
     assert_noexcept(p != nullptr);
     return static_cast<T **>(p);
 }
 
 template <class T>
-static void free_array(T **array, size_t count) noexcept {
+static noinline void free_array(T **array, size_t count) noexcept {
     for (size_t i = 0; i < count; i++) {
         T *item = upx::atomic_exchange(&array[i], (T *) nullptr);
         delete item;
@@ -64,7 +66,7 @@ static void free_array(T **array, size_t count) noexcept {
 
 ElfLinker::Section::Section(const char *n, const void *i, unsigned s, unsigned a)
     : name(nullptr), output(nullptr), size(s), offset(0), p2align(a), next(nullptr) {
-    name = strdup(n);
+    name = ::strdup(n);
     assert_noexcept(name != nullptr);
     input = ::malloc(s + 1);
     assert_noexcept(input != nullptr);
@@ -86,7 +88,7 @@ ElfLinker::Section::~Section() noexcept {
 
 ElfLinker::Symbol::Symbol(const char *n, Section *s, upx_uint64_t o)
     : name(nullptr), section(s), offset(o) {
-    name = strdup(n);
+    name = ::strdup(n);
     assert_noexcept(name != nullptr);
     assert_noexcept(section != nullptr);
 }
@@ -117,8 +119,9 @@ ElfLinker::~ElfLinker() noexcept {
     free_array(relocations, nrelocations);
 }
 
-void ElfLinker::init(const void *pdata_v, int plen, unsigned pxtra) {
+void ElfLinker::init(unsigned arch, const void *pdata_v, int plen, unsigned pxtra) {
     const byte *pdata = (const byte *) pdata_v;
+    this->e_machine = arch;
     if (plen >= 16 && memcmp(pdata, "UPX#", 4) == 0) {
         // decompress pre-compressed stub-loader
         int method;
@@ -163,7 +166,7 @@ void ElfLinker::init(const void *pdata_v, int plen, unsigned pxtra) {
     if ((int) strlen("Sections:\n"
                      "SYMBOL TABLE:\n"
                      "RELOCATION RECORDS FOR ") < inputlen) {
-        char const *const eof = (char const *) &input[inputlen];
+        const char *const eof = (const char *) &input[inputlen];
         int pos = find(input, inputlen, "Sections:\n", 10);
         assert(pos != -1);
         char *const psections = (char *) input + pos;
@@ -183,7 +186,7 @@ void ElfLinker::init(const void *pdata_v, int plen, unsigned pxtra) {
     }
 }
 
-void ElfLinker::preprocessSections(char *start, char const *end) {
+void ElfLinker::preprocessSections(char *start, const char *end) {
     assert_noexcept(nsections == 0);
     char *nextl;
     for (; start < end; start = 1 + nextl) {
@@ -205,8 +208,8 @@ void ElfLinker::preprocessSections(char *start, char const *end) {
     addSection("*UND*", nullptr, 0, 0);
 }
 
-void ElfLinker::preprocessSymbols(char *start, char const *end) {
-    assert_noexcept(nsymbols == 0);
+void ElfLinker::preprocessSymbols(char *start, const char *end) {
+    assert_noexcept(nsymbols <= 1);
     char *nextl;
     for (; start < end; start = 1 + nextl) {
         nextl = strchr(start, '\n');
@@ -242,7 +245,7 @@ void ElfLinker::preprocessSymbols(char *start, char const *end) {
     }
 }
 
-void ElfLinker::preprocessRelocations(char *start, char const *end) {
+void ElfLinker::preprocessRelocations(char *start, const char *end) {
     assert_noexcept(nrelocations == 0);
     Section *section = nullptr;
     char *nextl;
@@ -329,6 +332,11 @@ ElfLinker::Section *ElfLinker::addSection(const char *sname, const void *sdata, 
     Section *sec = new Section(sname, sdata, slen, p2align);
     sec->sort_id = nsections;
     sections[nsections++] = sec;
+    if ('*' == sname[0]) {
+        if (!strcmp("*ABS*", sname)) {
+            addSymbol("*ABS*", "*ABS*", 0);
+        }
+    }
     return sec;
 }
 
@@ -347,8 +355,18 @@ ElfLinker::Symbol *ElfLinker::addSymbol(const char *name, const char *section,
 
 ElfLinker::Relocation *ElfLinker::addRelocation(const char *section, unsigned off, const char *type,
                                                 const char *symbol, upx_uint64_t add) {
+    if (EM_RISCV == this->e_machine) {
+        if ((symbol && '.' == symbol[0])        // compiler-generated; or 0f, 0b (etc.)
+            && (!strcmp(type, "R_RISCV_BRANCH") // known types
+                || !strcmp(type, "R_RISCV_RVC_BRANCH") || !strcmp(type, "R_RISCV_JAL") ||
+                !strcmp(type, "R_RISCV_JUMP") || !strcmp(type, "R_RISCV_RVC_JUMP"))) {
+            return nullptr; // ASSUME already relocated: source and target in same section
+        }
+    }
     if (grow_capacity(nrelocations, &nrelocations_capacity))
         relocations = realloc_array(relocations, nrelocations_capacity);
+    NO_printf("addRelocation section=(%s +%#x)  symbol=(%s +%#x)\n", section, off, symbol,
+              (unsigned) add);
     Relocation *rel = new Relocation(findSection(section), off, type, findSymbol(symbol), add);
     relocations[nrelocations++] = rel;
     return rel;
@@ -366,7 +384,9 @@ int ElfLinker::addLoader(const char *sname) {
     if (!sname[0])
         return outputlen;
 
-    char *begin = strdup(sname);
+    char *begin = ::strdup(sname);
+    assert_noexcept(begin != nullptr);
+    const auto begin_deleter = upx::MallocDeleter(&begin, 1); // don't leak memory
     char *end = begin + strlen(begin);
     for (char *sect = begin; sect < end;) {
         for (char *tokend = sect; *tokend; tokend++)
@@ -375,8 +395,7 @@ int ElfLinker::addLoader(const char *sname) {
                 break;
             }
 
-        if (sect[0] == '+') // alignment
-        {
+        if (sect[0] == '+') { // alignment
             assert(tail);
             unsigned l = hex(sect[2]) - tail->offset - tail->size;
             unsigned m = hex(sect[1]);
@@ -418,7 +437,6 @@ int ElfLinker::addLoader(const char *sname) {
         }
         sect += strlen(sect) + 1;
     }
-    ::free(begin);
     return outputlen;
 }
 
@@ -469,7 +487,7 @@ void ElfLinker::relocate() {
                    rel->value->offset == 0xdeaddead)
             throwInternalError("undefined symbol '%s' referenced\n", rel->value->name);
         else if (rel->value->section->output == nullptr)
-            throwInternalError("can not apply reloc '%s:%x' without section '%s'\n",
+            throwInternalError("cannot apply reloc '%s:%x' without section '%s'\n",
                                rel->section->name, rel->offset, rel->value->section->name);
         else {
             value = rel->value->section->offset + rel->value->offset + rel->add;
@@ -667,7 +685,7 @@ void ElfLinkerArm64LE::relocate1(const Relocation *rel, byte *location, upx_uint
             set_le64(location, get_le64(location) + value);
     } else if (!strcmp(type, "ADR_PREL_LO21")) {
         value -= rel->section->offset + rel->offset;
-        upx_uint32_t const m19 = ~(~0u << 19);
+        const upx_uint32_t m19 = ~(~0u << 19);
         upx_uint32_t w = get_le32(location);
         set_le32(location, (w & ~((3u << 29) | (m19 << 5))) | ((3u & value) << 29) |
                                ((m19 & (value >> 2)) << 5));
@@ -677,14 +695,155 @@ void ElfLinkerArm64LE::relocate1(const Relocation *rel, byte *location, upx_uint
         set_le64(location, get_le64(location) + value);
     } else if (!strcmp(type, "CONDBR19")) {
         value -= rel->section->offset + rel->offset;
-        upx_uint32_t const m19 = ~(~0u << 19);
+        const upx_uint32_t m19 = ~(~0u << 19);
         upx_uint32_t w = get_le32(location);
         set_le32(location, (w & ~(m19 << 5)) | ((((w >> 5) + (value >> 2)) & m19) << 5));
     } else if (!strcmp(type, "CALL26") || !strcmp(type, "JUMP26")) {
         value -= rel->section->offset + rel->offset;
-        upx_uint32_t const m26 = ~(~0u << 26);
+        const upx_uint32_t m26 = ~(~0u << 26);
         upx_uint32_t w = get_le32(location);
         set_le32(location, (w & ~m26) | (m26 & (value >> 2)));
+    } else
+        super::relocate1(rel, location, value, type);
+}
+
+// clang-format off
+unsigned extr_imm_RV_JAL(unsigned w);
+unsigned extr_imm_RV_JAL(unsigned w)
+{
+    return ((0x3ff & (w >> 21)) << 1)
+        | ((     1 & (w >> 20)) << 11)
+        | ((  0xff & (w >> 12)) << 12)
+        | ((     1 & (w >> 31)) << 20);
+}
+unsigned ins_imm_RV_JAL(unsigned w);
+unsigned ins_imm_RV_JAL(unsigned w)
+{
+    return 0
+        | (( 0x3ff & (w >>  1)) << 21)
+        | ((     1 & (w >> 11)) << 20)
+        | ((  0xff & (w >> 12)) << 12)
+        | ((     1 & (w >> 20)) << 31);
+}
+
+unsigned extr_imm_RV_Bxx(unsigned w);
+unsigned extr_imm_RV_Bxx(unsigned w)
+{
+    return 0
+        | ((0xf & (w >>  8)) << 1)
+        | ((077 & (w >> 25)) << 5)
+        | ((  1 & (w >>  7)) << 11)
+        | ((  1 & (w >> 31)) << 12);
+}
+unsigned ins_imm_RV_Bxx(unsigned w);
+unsigned ins_imm_RV_Bxx(unsigned w)
+{
+    return 0
+        | ((0xf & (w >>  1)) <<  8)
+        | ((077 & (w >>  5)) << 25)
+        | ((  1 & (w >> 11)) <<  7)
+        | ((  1 & (w >> 12)) << 31);
+}
+
+unsigned extr_imm_RVC_Beq(unsigned w);
+unsigned extr_imm_RVC_Beq(unsigned w)
+{
+    return ((3 & (w >>  3)) << 1)
+        | (( 3 & (w >> 10)) << 3)
+        | (( 1 & (w >>  2)) << 5)
+        | (( 3 & (w >>  5)) << 6)
+        | (( 1 & (w >> 12)) << 8);
+}
+unsigned ins_imm_RVC_Beq(unsigned w);
+unsigned ins_imm_RVC_Beq(unsigned w)
+{
+    return 0
+        | ((1 & (w >> 5)) <<  2)
+        | ((3 & (w >> 1)) <<  3)
+        | ((3 & (w >> 6)) <<  5)
+        | ((3 & (w >> 3)) << 10)
+        | ((1 & (w >> 8)) << 12);
+}
+
+unsigned extr_imm_RVC_Jmp(unsigned w);
+unsigned extr_imm_RVC_Jmp(unsigned w)
+{
+    return ((7 & (w >>  3)) << 1)
+        | (( 1 & (w >> 11)) << 4)
+        | (( 1 & (w >>  2)) << 5)
+        | (( 1 & (w >>  7)) << 6)
+        | (( 1 & (w >>  6)) << 7)
+        | (( 3 & (w >>  9)) << 8)
+        | (( 1 & (w >>  8)) << 10)
+        | (( 1 & (w >> 12)) << 11);
+}
+unsigned ins_imm_RVC_Jmp(unsigned w);
+unsigned ins_imm_RVC_Jmp(unsigned w)
+{
+    return 0
+        | ((7 & (w >>  1)) <<  3)
+        | ((1 & (w >>  4)) << 11)
+        | ((1 & (w >>  5)) <<  2)
+        | ((1 & (w >>  6)) <<  7)
+        | ((1 & (w >>  7)) <<  6)
+        | ((3 & (w >>  8)) <<  9)
+        | ((1 & (w >> 10)) <<  8)
+        | ((1 & (w >> 11)) << 12);
+}
+
+#if 0  //{  RV32 only!
+unsigned extr_imm_RVC_JAL(unsigned w);
+unsigned extr_imm_RVC_JAL(unsigned w)  // RV32 only!
+{
+    return ((0x7 & (w >>  3)) <<  1)
+        | ((   1 & (w >> 11)) <<  4)
+        | ((   1 & (w >>  2)) <<  5)
+        | ((   1 & (w >>  7)) <<  6)
+        | ((   1 & (w >>  6)) <<  7)
+        | ((   3 & (w >>  9)) <<  8)
+        | ((   1 & (w >>  8)) << 10)
+        | ((   1 & (w >> 11)) << 11) ;
+}
+unsigned ins_imm_RVC_JAL(unsigned w);
+unsigned ins_imm_RVC_JAL(unsigned w)  // RV32 only!
+{
+    return ((0x7 & (w >>  1)) <<  3)
+        | ((   1 & (w >>  4)) << 11)
+        | ((   1 & (w >>  5)) <<  2)
+        | ((   1 & (w >>  6)) <<  7)
+        | ((   1 & (w >>  7)) <<  6)
+        | ((   3 & (w >>  8)) <<  9)
+        | ((   1 & (w >> 10)) <<  0)
+        | ((   1 & (w >> 11)) << 11) ;
+}
+#endif  //}
+// clang-format on
+
+void ElfLinkerRiscv64LE::relocate1(const Relocation *rel, byte *location, upx_uint64_t value,
+                                   const char *type) {
+    if (strncmp(type, "R_RISCV_", 8)) // not us
+        return super::relocate1(rel, location, value, type);
+    type += 8;
+
+    if (!strncmp(type, "BRANCH", 6)) {
+        value -= rel->section->offset + rel->offset;
+        unsigned instr = get_le32(location);
+        set_le32(location,
+                 (((037 << 20) | (037 << 15) | (7 << 12) | 0x7f) & instr) | ins_imm_RV_Bxx(value));
+    } else if (!strncmp(type, "JAL", 3)) {
+        value -= rel->section->offset + rel->offset;
+        unsigned instr = get_le32(location);
+        set_le32(location, (0xfff & instr) | ins_imm_RV_JAL(value));
+    } else if (!strncmp(type, "RVC_BRANCH", 10)) {
+        value -= rel->section->offset + rel->offset;
+        unsigned instr = get_le16(location);
+        set_le16(location, (((7 << 13) | (7 << 7) | 3) & instr) | ins_imm_RVC_Beq(value));
+    } else if (!strncmp(type, "RVC_JUMP", 8)) {
+        value -= rel->section->offset + rel->offset;
+        unsigned instr = get_le16(location);
+        set_le16(location, (((7 << 13) | 3) & instr) | ins_imm_RVC_Jmp(value));
+    } else if (!strncmp(type, "32", 2)) {
+        set_le32(location, value);
     } else
         super::relocate1(rel, location, value, type);
 }

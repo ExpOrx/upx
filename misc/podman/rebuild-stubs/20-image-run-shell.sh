@@ -45,8 +45,8 @@ fi
 #   # make sure that git is clean:
 #   git status .
 #   # remove stub files and make sure that they got deleted:
-#   make maintainer-clean extra-clean
-#   git status .
+#   make maintainer-clean extra-maintainer-clean
+#   git status . || true # make sure the stub files got deleted
 #   # rebuild
 #   make extra-all all
 #   # make sure that the stub files did rebuild correctly:

@@ -2,9 +2,9 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-*  Copyright (C) 1996-2025 Laszlo Molnar
-*  Copyright (C) 2000-2025 John F. Reiser
+*  Copyright (C) Markus Franz Xaver Johannes Oberhumer
+*  Copyright (C) Laszlo Molnar
+*  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -215,8 +215,18 @@ unfold:  # IN: $r_fexp,$r_auxv,$r_PMASK,$r_FOLD
         beqz a1,2b  // try old (, 0) if failure was EINVAL
           nop
 8:
-HALT:
-        break  // both (, MFD_EXEC) and (, 0) failed
+no_memfd:  // so try /dev/shm
+
+O_RDWR= 2
+O_DIRECTORY= 0200000  // 0x010000
+O_TMPFILE= 020000000  // 0x400000
+        call 0f; nop; .asciz "/dev/shm"; .balign 4
+0:
+        li   a2,0700  // mode
+        li   a1,O_DIRECTORY | O_TMPFILE | O_RDWR
+        move a0,ra  // "/dev/shm"
+        li v0,__NR_open
+        syscall
 9:
 
 # alloca() for de-compressed stub
@@ -242,8 +252,8 @@ HALT:
         lbu at,0(sp)  # first byte of PAGE_MASK
           lw v1,9*NBPW(sp)
         beqz at,0f  # 0 ==> little endian
-          lw at,7*NBPW(sp)
-        sw v1,6*NBPW(sp)
+          lw at,8*NBPW(sp)
+        sw v1,5*NBPW(sp)
         sw at,4*NBPW(sp)
 0:
 
@@ -272,6 +282,9 @@ HALT:
 
         jr ra
           addu $r_ADRX,$r_elfa,$r_ADRX  # compressed data
+
+HALT:  // cannot write() or mmap() de-compressed stub
+        break
 
 zfind:  # result in $r_auxv
         lw v1,(a0); addiu a0,a0,NBPW

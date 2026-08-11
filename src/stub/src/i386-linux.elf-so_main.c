@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2021 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2021 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,10 +31,13 @@
 
 
 #include "include/linux.h"
+#define NBPW 4
 
 extern void my_bkpt(void const *arg1, ...);
 
+#ifndef DEBUG  //{
 #define DEBUG 0
+#endif  //}
 
 // Pprotect is mprotect, but page-aligned on the lo end (Linux requirement)
 unsigned Pprotect(void *, size_t, unsigned);
@@ -63,6 +66,55 @@ ssize_t Pwrite(int, void const *, size_t);
 // it at an address different from it load address:  there must be no
 // static data, and no string constants.
 
+#if defined(__i386__) || defined(__x86_64) //{
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("call 0f; .asciz \"" string "\"; 0: pop %0" \
+/*out*/ : "=r"(str) ); \
+    str; \
+})
+#elif defined(__arm__) //}{
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("bl 0f; .string \"" string "\"; .balign 4; 0: mov %0,lr" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : "lr"); \
+    str; \
+})
+#elif defined(__mips__) //}{
+#define addr_string(string) ({ \
+    char const *str; \
+    asm(".set noreorder; bal 0f; move %0,ra; .set reorder; .string \"" string "\"; .balign 4;  0:" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : "ra"); \
+    str; \
+})
+#elif defined(__powerpc__)  //}{
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("bl 0f; .string \"" string "\"; .balign 4; 0: mflr %0" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : "lr"); \
+    str; \
+    dprintf(r_fmt, args); \
+})
+#elif defined(__riscv) //}{
+#define ANDROID_FRIEND 0
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("jal %0,0f; .string \"" string "\"; .balign 4; 0:" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : ); \
+    str; \
+})
+#else  //}{
+       error;  // addr_string definition needed
+#endif  //}  $(ARCH) addr_string
+
 #if !DEBUG //{
 #define DPRINTF(fmt, args...) /*empty*/
 #else  //}{
@@ -73,46 +125,9 @@ ssize_t Pwrite(int, void const *, size_t);
 // must be doubled in the format string, because the format
 // string is processed twice: once at compile-time by 'asm'
 // to produce the assembled value, and once at runtime to use it.
-#if defined(__powerpc__)  //{
-#define DPRINTF(fmt, args...) ({ \
-    char const *r_fmt; \
-    asm("bl 0f; .string \"" fmt "\"; .balign 4; 0: mflr %0" \
-/*out*/ : "=r"(r_fmt) \
-/* in*/ : \
-/*und*/ : "lr"); \
-    dprintf(r_fmt, args); \
-})
-#elif defined(__x86_64) || defined(__i386__) //}{
-#define DPRINTF(fmt, args...) ({ \
-    char const *r_fmt; \
-    asm("call 0f; .asciz \"" fmt "\"; 0: pop %0" \
-/*out*/ : "=r"(r_fmt) ); \
-    dprintf(r_fmt, args); \
-})
-#elif defined(__arm__)  /*}{*/
-#define DPRINTF(fmt, args...) ({ \
-    char const *r_fmt; \
-    asm("mov %0,pc; b 0f; \
-        .asciz \"" fmt "\"; .balign 4; \
-      0: " \
-/*out*/ : "=r"(r_fmt) ); \
-    dprintf(r_fmt, args); \
-})
-#elif defined(__mips__)  /*}{*/
-#define DPRINTF(fmt, args...) ({ \
-    char const *r_fmt; \
-    asm(".set noreorder; bal L%=j; move %0,$31; .set reorder; \
-        .asciz \"" fmt "\"; .balign 4; \
-      L%=j: " \
-/*out*/ : "=r"(r_fmt) \
-/* in*/ : \
-/*und*/ : "ra"); \
-    dprintf(r_fmt, args); \
-})
-#endif  //}
-
+#define DPRINTF(fmt, args...) ({ dprintf(addr_string(fmt), args); })
 static int dprintf(char const *fmt, ...); // forward
-#endif  //}
+#endif  //} DEBUG
 
 #ifdef __arm__  //{
 extern unsigned div10(unsigned);
@@ -246,25 +261,6 @@ ERR_LAB
     DPRINTF("  end unpackExtent\\n", 0);
 }
 
-#if defined(__i386__) //}{
-#define addr_string(string) ({ \
-    char const *str; \
-    asm("call 0f; .asciz \"" string "\"; 0: pop %0" \
-/*out*/ : "=r"(str) ); \
-    str; \
-})
-#elif defined(__arm__) //}{
-#define addr_string(string) ({ \
-    char const *str; \
-    asm("bl 0f; .string \"" string "\"; .balign 4; 0: mov %0,lr" \
-/*out*/ : "=r"(str) \
-/* in*/ : \
-/*und*/ : "lr"); \
-    str; \
-})
-#else  //}{
-       error;
-#endif  //}
 
 #define ElfW(sym) Elf32_ ## sym
 
@@ -347,27 +343,28 @@ make_hatch(
 #elif defined(__mips__)  /*}{*/
 static void *
 make_hatch(
-    ElfW(Phdr) const *const phdr,
+    Elf32_Phdr const *const phdr,
     char *next_unc,
     unsigned const frag_mask)
 {
     unsigned xprot = 0;
     unsigned *hatch = 0;
-    DPRINTF("make_hatch %%p %%x %%x\\n",phdr,reloc,frag_mask);
+    DPRINTF("make_hatch %%p %%x %%x\\n",phdr,next_unc,frag_mask);
     if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
         if (
         // Try page fragmentation just beyond .text .
-            ( (hatch = (void *)(phdr->p_memsz + phdr->p_vaddr + reloc)),
+            ( (hatch = (void *)next_unc),
                 ( phdr->p_memsz==phdr->p_filesz  // don't pollute potential .bss
-                &&  (3*4)<=(frag_mask & -(int)hatch) ) ) // space left on page
+                &&  (3*NBPW)<=(frag_mask & -(int)hatch) ) ) // space left on page
         // Allocate and use a new page.
         ||   (  xprot = 1, hatch = mmap(0, PAGE_SIZE, PROT_WRITE|PROT_READ,
                 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) )
         ) {
+            hatch = (unsigned *)(~3ul & (3+ (unsigned long)hatch));
             hatch[0]= 0x0000000c;  // syscall
 #define RS(r) ((037&(r))<<21)
 #define JR 010
-            hatch[1] = RS(30)|JR;  // jr $30  # s8
+            hatch[1] = RS(31)|JR;  // jr ra
             hatch[2] = 0x00000000;  //   nop
             if (xprot) {
                 Pprotect(hatch, 3*sizeof(unsigned), PROT_EXEC|PROT_READ);
@@ -510,6 +507,8 @@ prep_SELinux(unsigned size, char *ptr, ElfW(Addr) page_mask) // returns mfd
     char saved[SAVED_SIZE];
     char *page = (char *)(page_mask & (ElfW(Addr))ptr);
     unsigned frag = (unsigned)(ptr - page);
+    DPRINTF("prep_SELinux size= %%p  ptr= %%p  page_mask= %%p\\n",
+        size, ptr, page_mask);
     if (frag) {
         memcpy(saved, page, frag);
     }
@@ -523,6 +522,8 @@ prep_SELinux(unsigned size, char *ptr, ElfW(Addr) page_mask) // returns mfd
         write(mfd, saved, frag);  // Save lo fragment of contents on page.
     return mfd;
 }
+
+typedef void (*Dt_init)(int argc, char *argv[], char *envp[]);
 
 typedef struct {
     long argc;
@@ -556,7 +557,6 @@ upx_so_main(  // returns &escape_hatch
 
     char *const cpr_ptr = so_info->off_info + va_load;
     unsigned const cpr_len = (char *)so_info - cpr_ptr;
-    typedef void (*Dt_init)(int argc, char *argv[], char *envp[]);
     Dt_init const dt_init = (Dt_init)(void *)(so_info->off_user_DT_INIT + va_load);
     DPRINTF("upx_so_main  va_load=%%p  so_info= %%p  so_infc=%%p  cpr_ptr=%%p  cpr_len=%%x  xct_off=%%x  dt_init=%%p\\n",
         va_load, so_info, &so_infc, cpr_ptr, cpr_len, xct_off, dt_init);
@@ -649,7 +649,14 @@ upx_so_main(  // returns &escape_hatch
     DPRINTF("Punmap sideaddr=%%p  cpr_len=%%p\\n", sideaddr, cpr_len);
     Punmap(sideaddr, cpr_len);
     DPRINTF("calling user DT_INIT %%p\\n", dt_init);
-    dt_init(so_args->argc, so_args->argv, so_args->envp);
+#ifdef __mips__  //{
+    extern Dt_init PIC_call(Dt_init);
+    // Note: MIPS does not pass argc,argv,envp to 'constructor' inits
+    PIC_call(dt_init)
+#else  //}{
+             dt_init
+#endif  //}
+                    (so_args->argc, so_args->argv, so_args->envp);
 
     DPRINTF("returning hatch=%%p\\n", hatch);
     return hatch;

@@ -3,9 +3,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,8 +33,8 @@
 /* clang-format off */
 
 #define STUB_ARM64_LINUX_ELF_SO_FOLD_SIZE    19970
-#define STUB_ARM64_LINUX_ELF_SO_FOLD_ADLER32 0xadec98e4
-#define STUB_ARM64_LINUX_ELF_SO_FOLD_CRC32   0x1d1a425b
+#define STUB_ARM64_LINUX_ELF_SO_FOLD_ADLER32 0xfa39994c
+#define STUB_ARM64_LINUX_ELF_SO_FOLD_CRC32   0x107b6849
 
 unsigned char stub_arm64_linux_elf_so_fold[19970] = {
 /* 0x0000 */ 127, 69, 76, 70,  2,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,
@@ -209,8 +209,8 @@ unsigned char stub_arm64_linux_elf_so_fold[19970] = {
 /* 0x0a90 */ 159, 59,  3,213, 70,  1,232, 55,198, 12, 64,146,104,  0,128,146,
 /* 0x0aa0 */   8, 33,198,154,  3,  1,  3,138, 35,117, 11,213, 99,  0,  8,203,
 /* 0x0ab0 */ 127,  0,  4,235,163,255,255, 84,159, 59,  3,213,223, 63,  3,213,
-/* 0x0ac0 */ 104, 28,128, 82,  1,  0,  0,212,192,  3, 95,214,255,  3, 16,209,
-/* 0x0ad0 */ 226,  3,  0,145,  0,  0,  0,148,255,  3, 16,145,226,  3,  0,170,
+/* 0x0ac0 */ 104, 28,128, 82,  1,  0,  0,212,192,  3, 95,214,255,  7, 64,209,
+/* 0x0ad0 */ 226,  3,  0,145,  0,  0,  0,148,255,  7, 64,145,226,  3,  0,170,
 /* 0x0ae0 */ 224,  7,193,168,232, 26,128, 82, 64,  0, 31,214,225,  3,  0,170,
 /* 0x0af0 */  32, 20, 64, 56, 34, 20, 64, 56,  0, 32,  2, 42, 34, 20, 64, 56,
 /* 0x0b00 */   0, 64,  2, 42, 34, 20, 64, 56,  0, 96,  2, 42,192,  3, 95,214,

@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -48,6 +48,8 @@
 #undef i386
 #undef large
 #undef linux
+#undef mc68000
+#undef mc68020
 #undef mips
 #undef near
 #undef powerpc

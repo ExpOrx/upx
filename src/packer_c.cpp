@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -33,7 +33,25 @@
 // compression method util
 **************************************************************************/
 
-/*static*/ bool Packer::isValidCompressionMethod(int m) {
+/*static*/ bool Packer::isValidFormat(int format) noexcept {
+    if (!((format >= 1 && format <= UPX_F_CPM86_CMD) ||
+          (format >= 129 && format <= UPX_F_DYLIB_PPC64))) {
+        return false;
+    }
+    switch (format) {
+    case 6:   // UPX_F_VXD_LE               6 // NOT IMPLEMENTED
+    case 11:  // UPX_F_WIN16_NE            11 // NOT IMPLEMENTED
+    case 13:  // UPX_F_LINUX_SEP_i386      13 // NOT IMPLEMENTED
+    case 17:  // UPX_F_ELKS_8086           17 // NOT IMPLEMENTED
+    case 38:  // UPX_F_MACH_PPC64LE        38 // DOES NOT EXIST
+    case 41:  // UPX_F_DYLIB_PPC64LE       41 // DOES NOT EXIST
+    case 130: // UPX_F_SOLARIS_SPARC      130 // NOT IMPLEMENTED
+        return false;
+    }
+    return true;
+}
+
+/*static*/ bool Packer::isValidCompressionMethod(int m) noexcept {
     return M_IS_LZMA(m) || M_IS_NRV2B(m) || M_IS_NRV2D(m) || M_IS_NRV2E(m);
 }
 

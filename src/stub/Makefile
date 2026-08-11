@@ -36,7 +36,6 @@ else ifneq ($(wildcard $(HOME)/bin/bin-upx/upx-stubtools-check-version),)
 export PATH := $(HOME)/bin/bin-upx:$(PATH)
 endif
 
-
 # /***********************************************************************
 # //
 # ************************************************************************/
@@ -84,6 +83,7 @@ STUBS += arm64-linux.shlib-init.h
 STUBS += arm64-darwin.macho-entry.h
 STUBS += arm64-darwin.macho-fold.h
 STUBS += arm64-win64.pe.h
+STUBS += i086-cpm86.cmd.h
 STUBS += i086-dos16.com.h
 STUBS += i086-dos16.exe.h
 STUBS += i086-dos16.sys.h
@@ -121,9 +121,13 @@ STUBS += i386-win32.pe.h
 STUBS += m68k-atari.tos.h
 STUBS += mips.r3000-linux.elf-entry.h
 STUBS += mips.r3000-linux.elf-fold.h
+STUBS += mips.r3000-linux.elf-so_entry.h
+STUBS += mips.r3000-linux.elf-so_fold.h
 STUBS += mips.r3000-linux.shlib-init.h
 STUBS += mipsel.r3000-linux.elf-entry.h
 STUBS += mipsel.r3000-linux.elf-fold.h
+STUBS += mipsel.r3000-linux.elf-so_entry.h
+STUBS += mipsel.r3000-linux.elf-so_fold.h
 STUBS += mipsel.r3000-linux.shlib-init.h
 STUBS += mipsel.r3000-ps1.h
 STUBS += powerpc-darwin.dylib-entry.h
@@ -138,13 +142,17 @@ STUBS += powerpc64le-linux.elf-entry.h
 STUBS += powerpc64le-linux.elf-fold.h
 STUBS += powerpc64le-linux.kernel.vmlinux-head.h
 STUBS += powerpc64le-linux.kernel.vmlinux.h
-#STUBS += powerpc64-darwin.dylib-entry.h
-#STUBS += powerpc64-darwin.macho-entry.h
-#STUBS += powerpc64-darwin.macho-fold.h
+STUBS += powerpc64-darwin.dylib-entry.h
+STUBS += powerpc64-darwin.macho-entry.h
+STUBS += powerpc64-darwin.macho-fold.h
 STUBS += powerpc64-linux.elf-entry.h
 STUBS += powerpc64-linux.elf-fold.h
 #STUBS += powerpc64-linux.kernel.vmlinux-head.h
 #STUBS += powerpc64-linux.kernel.vmlinux.h
+STUBS += riscv64-linux.elf-entry.h
+STUBS += riscv64-linux.elf-fold.h
+STUBS += riscv64-linux.elf-so_entry.h
+STUBS += riscv64-linux.elf-so_fold.h
 endif
 
 
@@ -167,7 +175,7 @@ all: $$(all.targets)
 	@echo "timestamp" > $@
 .DELETE_ON_ERROR: .upx-stubtools-stamp
 %/.tmp-stamp:
-	@mkdir -p $(dir $@)
+	@mkdir -p "$(dir $@)"
 	@echo "timestamp" > $@
 .PRECIOUS: %/.tmp-stamp
 .all-stamp: $$(STUBS)
@@ -208,6 +216,7 @@ ECHO_e     = /bin/echo -e
 ECHO_E     = /bin/echo -E
 PERL       = perl
 PYTHON2    = python2
+PYTHON3    = python3
 UNIX2DOS  := $(PERL) -i -pe 's/$$/\r/;'
 
 # trim (strip) trailing whitespace
@@ -220,7 +229,6 @@ BLDEL     := $(RTRIM) | sed -e '/^$$/d'
 BLDELTOP  := sed -e '/./,$$!d'
 # delete blank lines at bottom (end) of file
 BLDELBOT  := sed -e ':a' -e '/^\n*$$/{$$d;N;ba' -e '}'
-
 
 # /***********************************************************************
 # // setup toolchain globals
@@ -240,15 +248,15 @@ define tc
 endef
 
 # default tools
-tc.default.bin2h      = $(PYTHON2) $(top_srcdir)/src/stub/scripts/bin2h.py --ident=auto-stub
+tc.default.bin2h      = $(PYTHON3) "$(top_srcdir)/src/stub/scripts/bin2h.py" --ident=auto-stub
 ##tc.default.bin2h-c    = $(call tc,bin2h) --compress=14,15,0
 tc.default.bin2h-c    = $(call tc,bin2h) --compress=0
-tc.default.brandelf   = $(PYTHON2) $(top_srcdir)/src/stub/scripts/brandelf.py $(if $(tc_bfdname),--bfdname=$(tc_bfdname))
-tc.default.gpp_inc    = $(PYTHON2) $(top_srcdir)/src/stub/scripts/gpp_inc.py
-tc.default.gpp_mkdep  = $(PYTHON2) $(top_srcdir)/src/stub/scripts/gpp_inc.py -o /dev/null
+tc.default.brandelf   = $(PYTHON3) "$(top_srcdir)/src/stub/scripts/brandelf.py" $(if $(tc_bfdname),--bfdname=$(tc_bfdname))
+tc.default.gpp_inc    = $(PYTHON3) "$(top_srcdir)/src/stub/scripts/gpp_inc.py"
+tc.default.gpp_mkdep  = $(PYTHON3) "$(top_srcdir)/src/stub/scripts/gpp_inc.py" -o /dev/null
 tc.default.pp-as      = i386-linux-gcc-3.4.6 -E -nostdinc -x assembler-with-cpp -Wall
 tc.default.sstrip     = sstrip-20060518
-tc.default.xstrip     = $(PYTHON2) $(top_srcdir)/src/stub/scripts/xstrip.py
+tc.default.xstrip     = $(PYTHON3) "$(top_srcdir)/src/stub/scripts/xstrip.py"
 
 # default multiarch-binutils
 tc.default.m-ar       = multiarch-ar-2.17
@@ -268,9 +276,10 @@ tc.default.readelf    = $(call tc,m-readelf)
 # default binutils functions
 define tc.default.f-embed_objinfo
 	chmod a-x $1
-	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_so_main $1
-	$(call tc,objcopy) -R .text -R .data -R .bss $1
-	$(call tc,objcopy) -R .comment -R .note -R .note.GNU-stack -R .reginfo $1
+	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_main2 --keep-symbol=upx_so_main $1
+	$(call tc,objcopy) -R .text -R .data -R .bss -R .riscv.attributes \
+	    -R .comment -R .note -R .note.GNU-stack -R .reginfo \
+	    -R .mdebug.eabi32 -R .gcc_compiled_long32 $1
 	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) $1 | $(RTRIM) > $1.disasm
 	$(call tc,objdump) -htr -w $1 | $(BLSQUEEZE) | sed \
 	  -e '1s/^.*: *file format/file format/' \
@@ -286,9 +295,10 @@ define tc.default.f-embed_objinfo_without_xstrip
 	chmod a-x $1
 	$(call tc,objcopy) -R .text -R .data -R .bss \
 	    -R .comment -R .note -R .note.GNU-stack -R .reginfo \
-	    -R .gnu.attributes -R .MIPS.abiflags \
-            -R .mdebug.eabi32 -R .gcc_compiled_long32 $1
-	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_so_main $1
+	    -R .gnu.attributes -R .MIPS.abiflags -R .riscv.attributes \
+	    -R .mdebug.eabi32 -R .gcc_compiled_long32 $1
+	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) $1 | $(RTRIM) > $1.disasm
+	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_main2 --keep-symbol=upx_so_main $1
 
 #
 # Disassemble for human readability
@@ -318,9 +328,11 @@ endef
 
 define tc.default.f-embed_objinfo_without_xstrip_keep_dot_text
 	chmod a-x $1
-	$(call tc,objcopy)          -R .data -R .bss $1
-	$(call tc,objcopy) -R .comment -R .note -R .note.GNU-stack -R .reginfo $1
-	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_so_main $1
+	$(call tc,objcopy) -R .data -R .bss \
+	    -R .comment -R .note -R .note.GNU-stack -R .reginfo \
+	    -R .gnu.attributes -R .MIPS.abiflags -R .riscv.attributes \
+            -R .mdebug.eabi32 -R .gcc_compiled_long32 $1
+	$(call tc,objcopy) --strip-unneeded --keep-symbol=_start --keep-symbol=upx_main2 --keep-symbol=upx_so_main --keep-symbol=str_upx $1
 #
 # Disassemble for human readability
 # objdump
@@ -362,7 +374,6 @@ tc.arch-i086.wdis     = $(WATCOM)/binl/wdis
 tc.arch-i386.gcc      = i386-linux-gcc-3.4.6 -m32 -march=i386 -nostdinc -MMD -MT $@
 tc.arch-i386.djasm    = djasm-20060614
 
-
 # /***********************************************************************
 # // amd64-darwin.dylib
 # ************************************************************************/
@@ -376,7 +387,6 @@ amd64-darwin.dylib-entry.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // amd64-darwin.macho
@@ -400,7 +410,7 @@ amd64-darwin.macho-fold.h : tmp/$$T.o tmp/amd64-darwin.macho-main.o
 	chmod a-x tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-amd64-darwin.macho-upxmain.h: amd64-darwin.macho-upxmain.exe
+amd64-darwin.macho-upxmain.h : amd64-darwin.macho-upxmain.exe
 	$(call tc,bin2h) $< $@
 
 tmp/amd64-darwin.macho-fold.o : $(srcdir)/src/$$T.S
@@ -410,7 +420,6 @@ tmp/amd64-darwin.macho-fold.o : $(srcdir)/src/$$T.S
 tmp/amd64-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -Os -fPIC $< -o $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // amd64-linux.elf
@@ -474,10 +483,10 @@ tmp/amd64-linux.elf-so_fold.o : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) -R .text $@
 	$(call tc,f-objstrip,$@)
 
-tmp/amd64-expand.o: $(srcdir)/src/$$T.S
+tmp/amd64-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
-tmp/amd64-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/amd64-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/amd64-linux.elf-upxfd_android.o : $(srcdir)/src/upxfd_android.c
@@ -492,10 +501,6 @@ tmp/amd64-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
 
 tmp/amd64-linux.elf-fold.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
-	$(call tc,f-objstrip,$@)
-
-tmp/amd64-linux.elf-main.o : $(srcdir)/src/$$T.c
-	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,f-objstrip,$@)
 
 tmp/amd64-linux.elf-main2.o : $(srcdir)/src/$$T.c
@@ -526,7 +531,6 @@ amd64-linux.kernel.vmlinux-head.h : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) --output-target binary --only-section .text tmp/$T.o tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // amd64-linux.shlib
 # ************************************************************************/
@@ -539,7 +543,6 @@ amd64-linux.shlib-init.h : $(srcdir)/src/$$T.S
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // amd64-win64.pe
 # ************************************************************************/
@@ -550,6 +553,7 @@ amd64-win64.pe.h : tc_objdump_disasm_options = -M intel-mnemonic
 
 tc.amd64-win64.pe.gcc  = amd64-linux-gcc-4.1.1 -m64 -nostdinc -DWINDOWS_BACK=1 -MMD -MT $@
 tc.amd64-win64.pe.gcc += -fno-exceptions -fno-asynchronous-unwind-tables
+tc.amd64-win64.pe.gcc += -mno-red-zone
 tc.amd64-win64.pe.gcc += -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror
 tc.amd64-win64.pe.objdump = multiarch-objdump-2.23.90
 
@@ -557,7 +561,6 @@ amd64-win64.pe.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // arm.v5a-darwin.macho (arm.v5a)
@@ -587,7 +590,6 @@ tmp/arm.v5a-darwin.macho-fold.o : $(srcdir)/src/$$T.S
 tmp/arm.v5a-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // arm.v4a-linux.elf (arm.v4a)
@@ -663,10 +665,10 @@ arm.v4a-linux.elf-so_fold.h : $(srcdir)/src/$$T.lds \
 	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
 
-tmp/arm.v4a-expand.o: $(srcdir)/src/$$T.S
+tmp/arm.v4a-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
-tmp/arm.v4a-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/arm.v4a-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/arm.v4a-linux.elf-fold.o : $(srcdir)/src/$$T.S
@@ -788,10 +790,10 @@ arm.v5a-linux.elf-so_fold.h : $(srcdir)/src/$$T.lds \
 	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
 
-tmp/arm.v5a-expand.o: $(srcdir)/src/$$T.S
+tmp/arm.v5a-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
-tmp/arm.v5a-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/arm.v5a-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/arm.v5a-linux.elf-fold.o : $(srcdir)/src/$$T.S
@@ -812,7 +814,7 @@ tmp/arm.v5a-linux.elf-so_main.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.e
 	$(call tc,f-objstrip,$@)
 
 # /* armel ? */
-tmp/armel-linux.elf-main.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-main.c
+tmp/armel-linux.elf-main2.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-main2.c
 	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,f-objstrip,$@)
 
@@ -820,7 +822,6 @@ tmp/armel-linux.elf-so_main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,objcopy) --rename-section .text=SO_MAIN -R .comment -R .note -R .note.GNU-stack -R .reginfo $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // arm64-linux.elf (arm64)
@@ -898,11 +899,11 @@ tmp/arm64-linux.elf-so_fold.o : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) -R .text $@
 	$(call tc,f-objstrip,$@)
 
-tmp/arm64-expand.o: $(srcdir)/src/$$T.S
+tmp/arm64-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 	arm64-linux-objdump-2.25 -Dr $(tc_objdump_disasm_options) tmp/$T.o | $(RTRIM) > tmp/$T.o.disasm
 
-tmp/arm64-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/arm64-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/arm64-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
@@ -925,6 +926,7 @@ tmp/arm64-linux.elf-so_main.o : $(srcdir)/src/$$T.c
 
 arm64-linux.shlib%.h : tc_list = arm64-linux.elf default
 arm64-linux.shlib%.h : tc_bfdname = elf64-littleaarch64
+
 tc.arm64-linux.shlib-init.objcopy  = arm64-linux-objcopy-2.25 -F elf64-littleaarch64
 tc.arm64-linux.shlib-init.objdump  = arm64-linux-objdump-2.25
 
@@ -933,18 +935,17 @@ arm64-linux.shlib%.h : $(srcdir)/src/$$T.S
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // arm64-win64.pe
 # ************************************************************************/
 
 arm64-win64.pe.h : tc_list = arm64-linux.elf default
+arm64-win64.pe.h : tc_bfdname = elf64-littleaarch64
 
 tc.arm64-win64.pe.gcc  = arm64-linux-gcc-4.9.2 -nostdinc -DWINDOWS_BACK=1 -MMD -MT $@
 tc.arm64-win64.pe.gcc += -fno-exceptions -fno-asynchronous-unwind-tables
 tc.arm64-win64.pe.gcc += -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror
 
-arm64-win64.pe.h : tc_bfdname = elf64-littleaarch64
 tc.arm64-win64.pe.objcopy  = arm64-linux-objcopy-2.25 -F elf64-littleaarch64
 tc.arm64-win64.pe.objdump  = arm64-linux-objdump-2.25
 
@@ -953,7 +954,6 @@ arm64-win64.pe.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // arm.v5a-linux.shlib (arm.v5a)
@@ -966,7 +966,6 @@ arm.v5a-linux.shlib%.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // arm.v5t-linux.shlib (arm.v5t)
@@ -1027,10 +1026,10 @@ tmp/armeb.v4a-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
 	$(call tc,objcopy) --rename-section .text=UMF_LINUX -R .comment -R .data -R .bss -R .note.GNU-stack $@
 	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) $@ | $(RTRIM) > $@.disasm
 
-tmp/armeb.v4a-expand.o: $(srcdir)/src/$$T.S
+tmp/armeb.v4a-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
-tmp/armeb.v4a-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/armeb.v4a-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/armeb.v4a-linux.elf-fold.o : $(srcdir)/src/$$T.S
@@ -1045,7 +1044,6 @@ tmp/armeb.v4a-linux.elf-so_main.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux
 	$(call tc,gcc) -c -O $< -o $@
 	$(call tc,objcopy) --rename-section .text=SO_MAIN -R .comment -R .note -R .note.GNU-stack -R .reginfo $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // armeb.v5a-linux.kernel.vmlinux      (arm.v5a)
@@ -1066,7 +1064,6 @@ armeb.v5a-linux.kernel.vmlinux-head.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.o
 	$(call tc,objcopy) --output-target binary --only-section .text tmp/$T.o tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // arm.v4a-wince.pe (arm.v4a)
@@ -1089,7 +1086,6 @@ arm.v4t-wince.pe.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -march=armv4t -c $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // arm64-darwin.macho
@@ -1124,6 +1120,19 @@ tmp/arm64-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,f-objstrip,$@)
 
 # /***********************************************************************
+# // i086-cpm86.cmd
+# ************************************************************************/
+
+i086-cpm86.cmd.h : tc_list = arch-i086 default
+i086-cpm86.cmd.h : tc_bfdname = elf32-i386
+i086-cpm86.cmd.h : tc_bfdarch = i8086
+
+i086-cpm86.cmd.h : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
+	$(call tc,f-embed_objinfo,tmp/$T.bin)
+	$(call tc,bin2h-c) tmp/$T.bin $@
+
+# /***********************************************************************
 # // i086-dos16.com
 # ************************************************************************/
 
@@ -1135,7 +1144,6 @@ i086-dos16.com.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // i086-dos16.exe
@@ -1150,7 +1158,6 @@ i086-dos16.exe.h : $(srcdir)/src/$$T.S
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // i086-dos16.sys
 # ************************************************************************/
@@ -1163,7 +1170,6 @@ i086-dos16.sys.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // i386-bsd.elf
@@ -1239,7 +1245,6 @@ tmp/i386-openbsd.elf-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c $< -o $@
 	$(call tc,f-objstrip,$@)
 
-
 # /***********************************************************************
 # // i386-bsd.elf.execve
 # ************************************************************************/
@@ -1271,7 +1276,6 @@ tmp/i386-bsd.elf.execve-upx_itoa.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o $@
 	$(call tc,f-objstrip,$@)
 
-
 # /***********************************************************************
 # // i386-darwin.dylib
 # ************************************************************************/
@@ -1285,7 +1289,6 @@ i386-darwin.dylib-entry.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // i386-darwin.macho
@@ -1316,7 +1319,6 @@ tmp/i386-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -Os $< -o $@
 	$(call tc,f-objstrip,$@)
 
-
 # /***********************************************************************
 # // i386-dos32.djgpp2
 # ************************************************************************/
@@ -1334,7 +1336,6 @@ i386-dos32.djgpp2-stubify.h : $(srcdir)/src/$$T.asm
 	$(call tc,objdump) -b binary -m i8086 -D --start-address=0x254 tmp/$T.bin | $(RTRIM) > tmp/$T.bin.disasm
 	$(call tc,bin2h) -q tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // i386-dos32.tmt
 # ************************************************************************/
@@ -1346,7 +1347,6 @@ i386-dos32.tmt.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // i386-dos32.watcom.le
@@ -1360,10 +1360,10 @@ i386-dos32.watcom.le.h : $(srcdir)/src/$$T.S
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // i386-linux.elf
 # ************************************************************************/
+
 i386-linux.elf%.h : tc_list = i386-linux.elf arch-i386 default
 i386-linux.elf%.h : tc_bfdname = elf32-i386
 
@@ -1450,10 +1450,10 @@ tmp/i386-linux.elf-so_fold.o : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) -R .text $@
 	$(call tc,f-objstrip,$@)
 
-tmp/i386-expand.o: $(srcdir)/src/$$T.S
+tmp/i386-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
-tmp/i386-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/i386-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/i386-linux.elf-main2.o : $(srcdir)/src/$$T.c
@@ -1495,7 +1495,6 @@ tmp/i386-linux.elf.execve-upx_itoa.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp $< -o $@
 	$(call tc,f-objstrip,$@)
 
-
 # /***********************************************************************
 # // i386-linux.elf.interp
 # ************************************************************************/
@@ -1521,7 +1520,6 @@ tmp/i386-linux.elf.interp-fold.o : $(srcdir)/src/$$T.S
 tmp/i386-linux.elf.interp-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c $< -o $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // i386-linux.elf.shell
@@ -1549,7 +1547,6 @@ tmp/i386-linux.elf.shell-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c $< -o $@
 	$(call tc,f-objstrip,$@)
 
-
 # /***********************************************************************
 # // i386-linux.kernel.vmlinux
 # // i386-linux.kernel.vmlinux-head
@@ -1569,7 +1566,6 @@ i386-linux.kernel.vmlinux-head.h : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) --output-target binary --only-section .text tmp/$T.o tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // i386-linux.shlib
 # ************************************************************************/
@@ -1582,7 +1578,6 @@ i386-linux.shlib-init.h : $(srcdir)/src/$$T.S
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // i386-win32.pe
 # ************************************************************************/
@@ -1594,7 +1589,6 @@ i386-win32.pe.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp -DWINDOWS_BACK=1 $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // m68k-atari.tos
@@ -1612,7 +1606,6 @@ m68k-atari.tos.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c -x assembler-with-cpp -Wa,-m68000,-l,--pcrel,--register-prefix-optional $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // mips.r3000-linux.elf
@@ -1634,6 +1627,16 @@ mips.r3000-linux.elf-entry.h : \
 	mipsel-linux-gcc-4.1.1 -E -meb -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
 	    -D__mips__  -D__MIPS__ -D_TARGET_LINUX_ $(srcdir)/src/$T.S \
 	    | mipsel-elf-as-20060406 -EB -O -mno-pdr  -o tmp/mips.r3000-linux.elf-entry.bin
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
+	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+mips.r3000-linux.elf-so_entry.h : \
+	    $(srcdir)/src/$$T.S
+	@echo; echo TARGET: $@; echo
+	mipsel-linux-gcc-4.1.1 -E -meb -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
+	    -D__mips__  -D__MIPSEB__ -D_TARGET_LINUX_ $(srcdir)/src/$T.S \
+	    | mipsel-elf-as-20060406 -EB -O -mno-pdr  -o tmp/mips.r3000-linux.elf-so_entry.bin
 	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
 	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
@@ -1664,6 +1667,67 @@ mips.r3000-linux.elf-fold.h : $(srcdir)/src/$$T.lds \
 # "unrecognized program segment header size"	$(call tc,sstrip) tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
+mips.r3000-linux.elf-so_fold.h : $(srcdir)/src/$$T.lds \
+	    $(srcdir)/src/$$T.S \
+	    tmp/mips.r3000-linux.elf-so_main.s \
+	    tmp/mips.r3000-linux.elf-upxfd_linux.s \
+	    src/mips.r3000-expand.S
+	@echo; echo TARGET: $@; echo
+	cat > tmp/mips.r3000-linux.elf-so_fold-2.S \
+	    src/mips.r3000-linux.elf-so_fold.S \
+	    tmp/mips.r3000-linux.elf-so_main.s \
+	    tmp/mips.r3000-linux.elf-upxfd_linux.s \
+	    src/mips.r3000-expand.S
+	(cd tmp; ln -sf ../src/arch arch)
+	$(call tc,gcc) -E \
+	        -D__mips__  -D__MIPSEB__ -D_TARGET_LINUX_ \
+	        tmp/mips.r3000-linux.elf-so_fold-2.S \
+	    | sed -e $$(cat src/dollar-dollar.sed) > tmp/mips.r3000-linux.elf-so_fold-3.S
+	# info: as-2.16.1 as used by gcc-4.1.1 does _not_ work`
+	mipsel-elf-as-20060406 -EB -march=r3000 tmp/mips.r3000-linux.elf-so_fold-3.S -o tmp/$T.o
+	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) tmp/$T.o > tmp/$@.disasm
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
+	$(call tc,ld) -r -T $(srcdir)/src/$T.lds -Map tmp/$T.map  -o tmp/$T.bin \
+	     tmp/$T.o
+	$(call tc,f-embed_objinfo_without_xstrip_keep_dot_text,tmp/$T.bin)
+# "unrecognized program segment header size"	$(call tc,sstrip) tmp/$T.bin
+	$(call tc,bin2h) tmp/$T.bin $@
+
+tmp/mips.r3000-linux.elf-main2.s : $(srcdir)/src/i386-linux.elf-main2.c
+	@echo; echo TARGET: $@; echo
+	cp $< tmp/mips.r3000-linux.elf-main2.c
+	( cd tmp; \
+	    mipsel-linux-gcc-4.1.1 -meb -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
+	        -fno-exceptions -fno-asynchronous-unwind-tables \
+	        -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror \
+		-D__mips__ -D__MIPS__ -D_TARGET_LINUX_ \
+		-I../src -S -O mips.r3000-linux.elf-main2.c -o mips.r3000-linux.elf-main2-1.S; \
+	    sed  < mips.r3000-linux.elf-main2-1.S  > mips.r3000-linux.elf-main2.s \
+	        -e '/section \.gcc_compiled/d' \
+	        -e '/section \.mdebug\.eabi/d' \
+	        -e '/\.previous/d' \
+	        -e '/^\t\.file\t/d' \
+	        -e 's/L[0-9][0-9]*/L7&/g' \
+	        -e $$(cat ../src/dollar-dollar.sed) \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /' \
+	)
+
+tmp/mips.r3000-linux.elf-so_main.s : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-so_main.c
+	mipsel-linux-gcc-4.1.1 -S -D__mips__ -D__MIPSEB__ -D_TARGET_LINUX_ -O \
+		-march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD -MT \
+		-fno-exceptions -fno-asynchronous-unwind-tables \
+		-Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror \
+		$< -o - \
+	    | sed > $@ \
+	        -e 's/@plt//' -e 's/^\t\.text/  section SO_MAIN/' \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /'
+
 tmp/mips.r3000-linux.elf-upxfd_linux.s : $(srcdir)/src/upxfd_linux.c
 	@echo; echo TARGET: $@; echo
 	cp $< tmp/mips.r3000-linux.elf-upxfd_linux.c
@@ -1679,33 +1743,11 @@ tmp/mips.r3000-linux.elf-upxfd_linux.s : $(srcdir)/src/upxfd_linux.c
 	        -e '/section .mdebug.eabi/d' \
 	        -e '/^\t\.file\t/d' \
 	        -e 's/^\t\.text/  .section UMF_LINUX, "ax"/' \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
-	        -e 's/[ \t]j[ \t]/	b /' \
-	        -e 's/[ \t]jal[ \t]/	bal /' \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /' \
 	)
-
-tmp/mips.r3000-linux.elf-main2.s: $(srcdir)/src/i386-linux.elf-main2.c
-	@echo; echo TARGET: $@; echo
-	cp $< tmp/mips.r3000-linux.elf-main2.c
-	( cd tmp; \
-	    mipsel-linux-gcc-4.1.1 -meb -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
-	        -fno-exceptions -fno-asynchronous-unwind-tables \
-	        -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror \
-		-D__mips__ -D__MIPS__ -D_TARGET_LINUX_ \
-		-I../src -S -O mips.r3000-linux.elf-main2.c; \
-	    sed  < mips.r3000-linux.elf-main2.s  > mips.r3000-linux.elf-main2.ii \
-	        -e '/section .gcc_compiled/d' \
-	        -e '/section .mdebug.eabi/d' \
-	        -e '/^\t\.file\t/d' \
-	        -e 's/L[0-9][0-9]*/L7&/g' \
-	        -e $$(cat ../src/dollar-dollar.sed) \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
-	        -e 's/[ \t]j[ \t]/	b /' \
-	        -e 's/[ \t]jal[ \t]/	bal /' \
-	    ; \
-	    mv mips.r3000-linux.elf-main2.ii mips.r3000-linux.elf-main2.s \
-	)
-
 
 # /***********************************************************************
 # // mips.r3000-linux.shlib
@@ -1728,16 +1770,14 @@ endif
 
 	$(call tc,bin2h-c) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // mipsel.r3000-linux.elf
 # ************************************************************************/
 
-mipsel.r3000-linux.elf%.h : tc_list = mipsel.r3000-ps1 default
+mipsel.r3000-linux.elf%.h : tc_list = mipsel.r3000-linux.elf mipsel.r3000-ps1 default
 mipsel.r3000-linux.elf%.h : tc_bfdname = elf32-littlemips
 
-tc.mipsel.r3000-linux.elf.as   = mipsel-elf-as-20060406 -EL -O -mno-pdr \
-	-D__mips__  -D__MIPSEL__ -D_TARGET_LINUX_
+tc.mipsel.r3000-linux.elf.as   = mipsel-elf-as-20060406 -EL -O -mno-pdr
 tc.mipsel.r3000-linux.elf.pp-as= mipsel-elf-as-20060406 -EL -mabi=eabi -Wall -mno-pdr
 tc.mipsel.r3000-linux.elf.gcc  = mipsel-linux-gcc-4.1.1 -mel -D__mips__ -D__MIPSEL__ -D_TARGET_LINUX_ \
 	-march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD -MT $@
@@ -1751,6 +1791,16 @@ mipsel.r3000-linux.elf-entry.h : \
 	mipsel-linux-gcc-4.1.1 -E -mel -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
 	    -D__mips__  -D__MIPSEL__ -D_TARGET_LINUX_ $(srcdir)/src/$T.S \
 	    | mipsel-elf-as-20060406 -EL -O -mno-pdr  -o tmp/mipsel.r3000-linux.elf-entry.bin
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
+	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+mipsel.r3000-linux.elf-so_entry.h : \
+	    $(srcdir)/src/$$T.S
+	@echo; echo TARGET: $@; echo
+	mipsel-linux-gcc-4.1.1 -E -mel -march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD \
+	    -D__mips__  -D__MIPSEL__ -D_TARGET_LINUX_ $(srcdir)/src/$T.S \
+	    | mipsel-elf-as-20060406 -EL -O -mno-pdr  -o tmp/mipsel.r3000-linux.elf-so_entry.bin
 	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
 	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
@@ -1781,6 +1831,73 @@ mipsel.r3000-linux.elf-fold.h : $(srcdir)/src/$$T.lds \
 # "unrecognized program segment header size"	$(call tc,sstrip) tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
+mipsel.r3000-linux.elf-so_fold.h : $(srcdir)/src/$$T.lds \
+	    $(srcdir)/src/$$T.S \
+	    tmp/mipsel.r3000-linux.elf-so_main.s \
+	    tmp/mipsel.r3000-linux.elf-upxfd_linux.s \
+	    src/mipsel.r3000-expand.S
+	@echo; echo TARGET: $@; echo
+	cat > tmp/mipsel.r3000-linux.elf-so_fold-2.S \
+	    src/mipsel.r3000-linux.elf-so_fold.S \
+	    tmp/mipsel.r3000-linux.elf-so_main.s \
+	    tmp/mipsel.r3000-linux.elf-upxfd_linux.s \
+	    src/mipsel.r3000-expand.S
+	(cd tmp; ln -sf ../src/arch arch)
+	$(call tc,gcc) -E \
+	        -D__mips__  -D__MIPSEL__ -D_TARGET_LINUX_ \
+	        tmp/mipsel.r3000-linux.elf-so_fold-2.S \
+	    | sed -e $$(cat src/dollar-dollar.sed) > tmp/mipsel.r3000-linux.elf-so_fold-3.S
+	# info: as-2.16.1 as used by gcc-4.1.1 does _not_ work`
+	$(call tc,as) -EL -march=r3000 tmp/mipsel.r3000-linux.elf-so_fold-3.S -o tmp/$T.o
+	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) tmp/$T.o > tmp/$@.disasm
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
+	$(call tc,ld) -r -T $(srcdir)/src/$T.lds -Map tmp/$T.map  -o tmp/$T.bin \
+	     tmp/$T.o
+	$(call tc,f-embed_objinfo_without_xstrip_keep_dot_text,tmp/$T.bin)
+# "unrecognized program segment header size"	$(call tc,sstrip) tmp/$T.bin
+	$(call tc,bin2h) tmp/$T.bin $@
+
+tmp/mipsel.r3000-linux.elf-main2.s : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-main2.c
+	@echo; echo TARGET: $@; echo
+	@echo PATH= $$PATH
+	mipsel-linux-gcc-4.1.1 -S -D__mips__ -D__MIPSEL__ -D_TARGET_LINUX_ -O \
+		-march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD -MT \
+		-fno-exceptions -fno-asynchronous-unwind-tables \
+		-Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror \
+		$< -o - \
+	    | sed > $@ \
+	          -e '1i \
+  .text' \
+	          -e '/section \.gcc_compiled/d' \
+	          -e '/section \.mdebug\.eabi/d' \
+	          -e '/\.previous/d' \
+	          -e '/^\t\.file\t/d' \
+	          -e 's/L[0-9][0-9]*/L7&/g' \
+	          -e $$(cat src/dollar-dollar.sed) \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /'
+
+tmp/mipsel.r3000-linux.elf-so_main.s : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-so_main.c
+	mipsel-linux-gcc-4.1.1 -S -D__mips__ -D__MIPSEL__ -D_TARGET_LINUX_ -O \
+		-march=r3000 -mno-abicalls -mabi=eabi -G0 -nostdinc -MMD -MT \
+		-fno-exceptions -fno-asynchronous-unwind-tables \
+		-Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror \
+		$< -o - \
+	    | sed > $@ \
+	        -e '/^\t\.file\t/d' \
+	        -e '/section .gcc_compiled/d' \
+	        -e '/section .mdebug.eabi/d' \
+	        -e '/\.previous/d' \
+	        -e 's/@plt//' \
+	        -e 's/$$L\([0-9][0-9]*\)/$$LM\1/' \
+	        -e 's/^\t\.text/  .section SO_MAIN, "ax"/' \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /'
+
 tmp/mipsel.r3000-linux.elf-upxfd_linux.s : $(srcdir)/src/upxfd_linux.c
 	@echo; echo TARGET: $@; echo
 	cp $< tmp/mipsel.r3000-linux.elf-upxfd_linux.c
@@ -1796,24 +1913,11 @@ tmp/mipsel.r3000-linux.elf-upxfd_linux.s : $(srcdir)/src/upxfd_linux.c
 	        -e '/section .mdebug.eabi/d' \
 	        -e '/^\t\.file\t/d' \
 	        -e 's/^\t\.text/  .section UMF_LINUX, "ax"/' \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
-	        -e 's/[ \t]j[ \t]/	b /' \
-	        -e 's/[ \t]jal[ \t]/	bal /' \
+	        -e 's/[ \t]jal[  \t][ \t]*\($$[0-9][0-9]*\)/  jalr \1/' \
+	        -e 's/[ \t][bj][ \t][ \t]*\($$[0-9][0-9]*\)/  jr \1/' \
+	        -e 's/[ \t]jal[  \t]/  bal /' \
+	        -e 's/[ \t]j[    \t]/  b /' \
 	)
-
-tmp/mipsel.r3000-linux.elf-main2.s: $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-main2.c
-	@echo; echo TARGET: $@; echo
-	$(call tc,gcc) -S -D__mips__ -D__MIPSEL__ -D_TARGET_LINUX_ -O $< -o - \
-	    | sed -e '/section .gcc_compiled/d' \
-	          -e '/section .mdebug.eabi/d' \
-	          -e '/^\t\.file\t/d' \
-	          -e 's/L[0-9][0-9]*/L7&/g' \
-	          -e $$(cat src/dollar-dollar.sed) \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
-	        -e 's/[ \t]j[ \t]/	b /' \
-	        -e 's/[ \t]jal[ \t]/	bal /' \
-		  >$@
-
 
 # /***********************************************************************
 # // mipsel.r3000-linux.shlib
@@ -1834,7 +1938,6 @@ else
 endif
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // mipsel.r3000-ps1
@@ -1862,7 +1965,6 @@ endif
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h-c) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // powerpc-darwin.macho
 # ************************************************************************/
@@ -1881,7 +1983,7 @@ powerpc-darwin.macho-fold.h : tmp/$$T.o tmp/powerpc-darwin.macho-main.o
 	chmod a-x tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-powerpc-darwin.macho-upxmain.h: powerpc-darwin.macho-upxmain.exe
+powerpc-darwin.macho-upxmain.h : powerpc-darwin.macho-upxmain.exe
 	$(call tc,bin2h) $< $@
 
 tmp/powerpc-darwin.macho-fold.o : $(srcdir)/src/$$T.S
@@ -1891,7 +1993,6 @@ tmp/powerpc-darwin.macho-fold.o : $(srcdir)/src/$$T.S
 tmp/powerpc-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c $< -o $@
 	$(call tc,f-objstrip,$@)
-
 
 # /***********************************************************************
 # // powerpc-darwin.dylib
@@ -1905,7 +2006,6 @@ powerpc-darwin.dylib-entry.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // powerpc-linux.elf
@@ -1941,7 +2041,7 @@ tmp/powerpc-linux.elf-main2.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf
 	$(call tc,gcc) -c $< -o $@
 	$(call tc,f-objstrip,$@)
 
-tmp/powerpc-linux.elf-help_umf.o: $(srcdir)/src/$$T.S
+tmp/powerpc-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 tmp/powerpc-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
@@ -1949,7 +2049,7 @@ tmp/powerpc-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
 	$(call tc,objcopy) --rename-section .text=UMF_LINUX -R .comment -R .data -R .bss -R .note.GNU-stack $@
 	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) $@ | $(RTRIM) > $@.disasm
 
-tmp/powerpc-expand.o: $(srcdir)/src/$$T.S
+tmp/powerpc-expand.o : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o $@
 
 # /***********************************************************************
@@ -1972,7 +2072,6 @@ powerpc-linux.kernel.vmlinux-head.h : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) --output-target binary --only-section .text tmp/$T.o tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-
 # /***********************************************************************
 # // powerpc64-darwin.dylib
 # ************************************************************************/
@@ -1985,7 +2084,6 @@ powerpc64-darwin.dylib-entry.h : $(srcdir)/src/$$T.S
 	$(call tc,gcc) -c $< -o tmp/$T.bin
 	$(call tc,f-embed_objinfo,tmp/$T.bin)
 	$(call tc,bin2h) tmp/$T.bin $@
-
 
 # /***********************************************************************
 # // powerpc64-darwin.macho
@@ -2022,7 +2120,6 @@ tmp/powerpc64-darwin.macho-fold.o : $(srcdir)/src/$$T.S
 tmp/powerpc64-darwin.macho-main.o : $(srcdir)/src/$$T.c
 	$(call tc,gcc) -c -O $< -o $@
 
-
 # /***********************************************************************
 # // powerpc64le-linux.elf
 # ************************************************************************/
@@ -2047,10 +2144,14 @@ powerpc64le-linux.elf-entry.h : $(srcdir)/src/$$T.S
 
 powerpc64le-linux.elf-fold.h : $(srcdir)/src/$$T.lds \
 	    $(srcdir)/src/$$T.S \
+	    src/powerpc64le-linux.elf-help_umf.S \
+	    tmp/powerpc64le-linux.elf-upxfd_linux.s \
 	    tmp/powerpc64le-linux.elf-main2.s \
 	    src/powerpc64le-expand.S
 	cat > tmp/powerpc64le-linux.elf-fold-2.S \
 	    src/powerpc64le-linux.elf-fold.S \
+	    src/powerpc64le-linux.elf-help_umf.S \
+	    tmp/powerpc64le-linux.elf-upxfd_linux.s \
 	    tmp/powerpc64le-linux.elf-main2.s \
 	    src/powerpc64le-expand.S
 	(cd tmp; ln -sf ../src/arch arch)
@@ -2081,7 +2182,17 @@ tmp/powerpc64le-linux.elf-main2.s: $(srcdir)/src/$$T.c $(srcdir)/src/amd64-linux
 	    | sed -e '/^\t\.file\t/d' \
 	          -e 's/L[0-9][0-9]*/L7&/g' \
 	          -e $$(cat src/dollar-dollar.sed) \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
+	        -e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
+	        -e 's/[ \t]j[ \t]/	b /' \
+	        -e 's/[ \t]jal[ \t]/	bal /' \
+		  >$@
+
+tmp/powerpc64le-linux.elf-upxfd_linux.s : $(srcdir)/src/upxfd_linux.c
+	$(call tc,gcc) -S -O $< -o - \
+	    | sed -e '/^\t\.file\t/d' \
+	          -e 's/L[0-9][0-9]*/L8&/g' \
+	          -e $$(cat src/dollar-dollar.sed) \
+	        -e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
 	        -e 's/[ \t]j[ \t]/	b /' \
 	        -e 's/[ \t]jal[ \t]/	bal /' \
 		  >$@
@@ -2093,6 +2204,7 @@ tc.powerpc64-linux.elf.gcc  = powerpc64-linux-gcc-4.9.2 -m64 -mbig-endian -DBIG_
 tc.powerpc64-linux.elf.gcc += -fno-exceptions -fno-asynchronous-unwind-tables -fno-stack-protector
 tc.powerpc64-linux.elf.gcc += -mno-longcall -mno-toc
 tc.powerpc64-linux.elf.gcc += -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror
+
 tc.powerpc64-linux.elf.ld      = powerpc64-linux-ld-2.25 -b $(tc_bfdname)
 tc.powerpc64-linux.elf.objcopy = multiarch-objcopy-2.27 -F $(tc_bfdname)
 tc.powerpc64-linux.elf.objdump = multiarch-objdump-2.27 -b $(tc_bfdname)
@@ -2127,24 +2239,23 @@ powerpc64-linux.elf-fold.h : $(srcdir)/src/$$T.lds \
 	$(call tc,gcc) -c tmp/powerpc64-linux.elf-fold-3.S -o tmp/$T.o
 	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) tmp/$T.o > tmp/$@.disasm
 	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $(srcdir)/src/$T.S
-	$(call tc,ld) -r -T $(srcdir)/src/$T.lds -Map tmp/$T.map  -o tmp/$T.bin \
+	$(call tc,ld) -r -T $(srcdir)/src/$T.lds -Map tmp/$T.map -o tmp/$T.bin \
 	     tmp/$T.o
 	$(call tc,f-embed_objinfo_without_xstrip_keep_dot_text,tmp/$T.bin)
 # "unrecognized program segment header size"	$(call tc,sstrip) tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
-tmp/powerpc64-linux.elf-main2.s: $(srcdir)/src/$$T.c $(srcdir)/src/amd64-linux.elf-main2.c
+tmp/powerpc64-linux.elf-main2.s : $(srcdir)/src/$$T.c $(srcdir)/src/amd64-linux.elf-main2.c
 	$(call tc,gcc) -S -O $< -o - \
 	    | sed -e '/^\t\.file\t/d' \
 	          -e 's/L[0-9][0-9]*/L7&/g' \
 	          -e $$(cat src/dollar-dollar.sed) \
-		-e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
+	        -e 's/[ \t]j[ \t][ \t]*$$31/	jr $$31/' \
 	        -e 's/[ \t]j[ \t]/	b /' \
 	        -e 's/[ \t]jal[ \t]/	bal /' \
 		  >$@
 
-# /***********************************************************************
-# // powerpc64le-linux.kernel.vmlinux
+
 # /***********************************************************************
 # // powerpc64le-linux.kernel.vmlinux
 # // powerpc64le-linux.kernel.vmlinux-head
@@ -2181,6 +2292,96 @@ powerpc64-linux.kernel.vmlinux-head.h : $(srcdir)/src/$$T.S
 	$(call tc,objcopy) --output-target binary --only-section .text tmp/$T.o tmp/$T.bin
 	$(call tc,bin2h) tmp/$T.bin $@
 
+# /***********************************************************************
+# // riscv64-linux.elf
+# ************************************************************************/
+
+riscv64-linux.elf%.h : tc_list = riscv64-linux.elf default
+riscv64-linux.elf%.h : tc_bfdname = elf64-littleriscv
+
+tc.riscv64-linux.elf.gcc  = /usr/bin/riscv64-linux-gnu-gcc -nostdinc -MMD -MT $@
+tc.riscv64-linux.elf.gcc += -fno-exceptions -fno-asynchronous-unwind-tables
+tc.riscv64-linux.elf.gcc += -fno-stack-protector -mno-relax -mno-riscv-attribute
+tc.riscv64-linux.elf.gcc += -Wall -W -Wcast-align -Wcast-qual -Wstrict-prototypes -Wwrite-strings -Werror
+
+tc.riscv64-linux.elf.ld      = /usr/bin/riscv64-linux-gnu-ld -b $(tc_bfdname)
+tc.riscv64-linux.elf.objcopy = /usr/bin/riscv64-linux-gnu-objcopy -F $(tc_bfdname) -R .riscv.attributes -R .eh_frame
+tc.riscv64-linux.elf.objdump = /usr/bin/riscv64-linux-gnu-objdump -b $(tc_bfdname)
+
+riscv64-linux.elf-entry.h : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c $< -o tmp/$T.bin
+	$(call tc,f-embed_objinfo,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+riscv64-linux.elf-so_entry.h : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c -O $< -o tmp/$T.o
+	$(call tc,ld) -r tmp/$T.o -Map tmp/$T.map $(filter %.o,$^) -o tmp/$T.bin
+	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+riscv64-linux.elf-fold.h : $(srcdir)/src/$$T.lds \
+	    tmp/$$T.o \
+	    tmp/riscv64-linux.elf-help_umf.o \
+	    tmp/riscv64-linux.elf-upxfd_linux.o \
+	    tmp/riscv64-expand.o \
+	    tmp/riscv64-linux.elf-main2.o
+	$(call tc,ld) -r -Map tmp/$T.map $(filter %.o,$^) -o tmp/$T.bin
+	$(call tc,f-embed_objinfo_without_xstrip_keep_dot_text,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+riscv64-linux.elf-so_fold.h : $(srcdir)/src/$$T.lds \
+	    tmp/riscv64-expand.o \
+	    tmp/riscv64-linux.elf-help_umf.o \
+	    tmp/riscv64-linux.elf-upxfd_linux.o \
+	    tmp/$$T.o \
+	    tmp/riscv64-linux.elf-so_main.o
+	@echo; echo TARGET=$@  PATH=$(PATH); echo
+	$(call tc,ld) -r -Map tmp/$T.map $(filter %.o,$^) -o tmp/$T.bin
+	ls -l tmp/$T.bin
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $<
+	$(call tc,f-embed_objinfo_without_xstrip,tmp/$T.bin)
+	$(call tc,bin2h) tmp/$T.bin $@
+
+tmp/riscv64-linux.elf-fold.o : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c -O $< -o $@
+	$(call tc,f-objstrip,$@)
+
+tmp/riscv64-linux.elf-so_fold.o : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -S -O $< -o - \
+	    | sed 's/@plt//' \
+	    | $(call tc,gcc) -c -x assembler-with-cpp - -o $@
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $<
+	$(call tc,f-objstrip,$@)
+
+tmp/riscv64-linux.elf-main2.o : $(srcdir)/src/$$T.c $(srcdir)/src/i386-linux.elf-main2.c
+	( echo '#define call jal'; $(call tc,gcc) -S -O $< -o - ) \
+	    | sed 's/@plt//' \
+	    | $(call tc,gcc) -c -x assembler-with-cpp - -o $@
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $<
+	$(call tc,f-objstrip,$@)
+
+tmp/riscv64-linux.elf-so_main.o : $(srcdir)/src/$$T.c
+	( echo '#define call jal'; $(call tc,gcc) -S -O $< -o - ) \
+	    | sed 's/@plt//' \
+	    | $(call tc,gcc) -c -x assembler-with-cpp - -o $@
+	$(call tc,gpp_mkdep) --mode=c --MMD=$@ --MF=tmp/$T.d $<
+	$(call tc,objcopy) --rename-section .text=SO_MAIN --keep-symbol=upx_so_main -R .comment -R .note -R .note.GNU-stack -R .reginfo $@
+	$(call tc,f-objstrip,$@)
+
+tmp/riscv64-linux.elf-help_umf.o : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c $< -o $@
+
+tmp/riscv64-linux.elf-upxfd_linux.o : $(srcdir)/src/upxfd_linux.c
+	( echo '#define call jal'; $(call tc,gcc) -S -O $< -o - ) \
+	    | sed 's/@plt//' \
+	    | $(call tc,gcc) -c -x assembler-with-cpp - -o $@
+	$(call tc,objcopy) --strip-unneeded --rename-section .text=UMF_LINUX \
+	    -R .riscv.attributes -R .data -R .bss -R .note.GNU-stack $@
+	$(call tc,objdump) -Dr $(tc_objdump_disasm_options) $@ | $(RTRIM) > $@.disasm
+
+tmp/riscv64-expand.o : $(srcdir)/src/$$T.S
+	$(call tc,gcc) -c $< -o $@
+	$(call tc,objcopy) -R .riscv.attributes $@
 
 # /***********************************************************************
 # // dependencies
@@ -2198,10 +2399,10 @@ ifneq ($(strip $(STUBS)),)
 .DELETE_ON_ERROR: $(STUBS)
 endif
 
-
 # /***********************************************************************
 # // extra-all
 # // extra-clean
+# // extra-maintainer-clean
 # ************************************************************************/
 
 ifndef EXTRA_MAKEFILES
@@ -2218,15 +2419,17 @@ ifneq ($(strip $(EXTRA_MAKEFILES)),)
 EXTRA_MAKEFILES.targets :=
 EXTRA_MAKEFILES.targets += $(addsuffix .~all,$(sort $(EXTRA_MAKEFILES)))
 EXTRA_MAKEFILES.targets += $(addsuffix .~clean,$(sort $(EXTRA_MAKEFILES)))
+EXTRA_MAKEFILES.targets += $(addsuffix .~maintainer-clean,$(sort $(EXTRA_MAKEFILES)))
 
 $(EXTRA_MAKEFILES.targets): MAKEFLAGS += --no-print-directory
 $(EXTRA_MAKEFILES.targets): $$(basename $$@)
 	$(MAKE) -C $(dir $@) -f $(basename $(notdir $@)) $(subst .~,,$(suffix $@))
 
-extra-all:   $$(filter %.~all,$$(EXTRA_MAKEFILES.targets))
-extra-clean: $$(filter %.~clean,$$(EXTRA_MAKEFILES.targets))
+extra-all:              $$(filter %.~all,$$(EXTRA_MAKEFILES.targets))
+extra-clean:            $$(filter %.~clean,$$(EXTRA_MAKEFILES.targets))
+extra-maintainer-clean: $$(filter %.~maintainer-clean,$$(EXTRA_MAKEFILES.targets))
 
-.PHONY: extra-all extra-clean $(EXTRA_MAKEFILES.targets)
+.PHONY: extra-all extra-clean extra-maintainer-clean $(EXTRA_MAKEFILES.targets)
 endif
 
 # vim:set ts=8 sw=8 noet:

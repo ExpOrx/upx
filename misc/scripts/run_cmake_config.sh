@@ -14,7 +14,7 @@ __add_cmake_config() {
 }
 
 # pass common CMake settings
-for v in CMAKE_VERBOSE_MAKEFILE; do
+for v in CMAKE_INSTALL_PREFIX CMAKE_MAKE_PROGRAM CMAKE_VERBOSE_MAKEFILE; do
     __add_cmake_config $v
 done
 # pass common CMake toolchain settings
@@ -26,7 +26,7 @@ for v in CMAKE_C_COMPILER_AR CMAKE_C_COMPILER_RANLIB CMAKE_CXX_COMPILER_AR CMAKE
     __add_cmake_config $v
 done
 # pass common CMake cross compilation settings
-for v in CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_CROSSCOMPILING_EMULATOR; do
+for v in CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_CROSSCOMPILING CMAKE_CROSSCOMPILING_EMULATOR; do
     __add_cmake_config $v
 done
 # pass UPX config options; see CMakeLists.txt

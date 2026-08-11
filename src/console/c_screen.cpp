@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -133,6 +133,7 @@ static int init(FILE *f, int o, int now) {
         return CON_INIT;
 
     mode = screen->getMode(screen);
+    UNUSED(mode);
     init_fg = cur_fg = screen->getFg(screen);
     init_bg = cur_bg = screen->getBg(screen);
     if (screen->isMono(screen))

@@ -104,3 +104,5 @@ check-whitespace clang-format run-testsuite run-testsuite-all run-testsuite-debu
 	$(MAKE) -C src $@
 endif
 endif
+
+# vim:set ts=8 sw=8 noet:

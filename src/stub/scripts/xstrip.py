@@ -1,11 +1,11 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 ## vim:set ts=4 sw=4 et: -*- coding: utf-8 -*-
 #
 #  xstrip.py -- truncate ELF objects created by multiarch-objcopy-2.17
 #
 #  This file is part of the UPX executable compressor.
 #
-#  Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+#  Copyright (C) Markus Franz Xaver Johannes Oberhumer
 #  All Rights Reserved.
 #
 #  UPX and the UCL library are free software; you can redistribute them
@@ -46,7 +46,7 @@ def strip_with_dump(dump_fn, eh, idata):
     new_len = 0
     lines = open(dump_fn, "rb").readlines()
     for l in lines:
-        l = re.sub(r"\s+", " ", l.strip())
+        l = re.sub(r"\s+", " ", l.strip().decode())
         f = l.split(" ")
         if len(f) >= 8:
             if f[7].startswith("CONTENTS"):
@@ -54,9 +54,9 @@ def strip_with_dump(dump_fn, eh, idata):
                 sh_size   = int("0x" + f[2], 16)
                 if sh_offset + sh_size > new_len:
                     new_len = sh_offset + sh_size
-                    ##print sh_offset, sh_size, f
+                    ##print (sh_offset, sh_size, f)
     if new_len > len(eh):
-        ##print dump_fn, new_len
+        ##print (dump_fn, new_len)
         return eh, idata[:new_len-len(eh)]
     return eh, idata
 
@@ -67,7 +67,7 @@ def strip_with_dump(dump_fn, eh, idata):
 
 def check_dump(dump_fn):
     lines = open(dump_fn, "rb").readlines()
-    lines = map(lambda l: re.sub(r"\s+", " ", l.strip()).strip(), lines)
+    lines = map(lambda l: re.sub(r"\s+", " ", l.strip().decode()).strip(), lines)
     lines = filter(None, lines)
     d = "\n".join(lines)
     psections = d.find("Sections:\n")
@@ -88,10 +88,10 @@ def check_dump(dump_fn):
         assert int(f[0], 10) == len(sections)
         e = f[1], int(f[2], 16), int(f[5], 16), int(f[6][3:], 10), len(sections)
         sections.append(e)
-        assert not section_names.has_key(e[0]), e
+        assert not e[0] in section_names, e
         assert not e[0].endswith(":"), ("bad section name", e)
         section_names[e[0]] = e
-    ##print sections
+    ##print (sections)
     # preprocessSymbols
     symbols = []
     section = None
@@ -140,25 +140,25 @@ def do_file(fn):
         fp = open(fn, "r+b")
     fp.seek(0, 0)
     idata = fp.read()
-    if idata[:4] != "\x7f\x45\x4c\x46":
+    if idata[:4] != "\x7f\x45\x4c\x46".encode():
         raise Exception("%s is not %s" % (fn, "ELF"))
-    if idata[4:7] == "\x01\x01\x01":
+    if idata[4:7] == "\x01\x01\x01".encode():
         # ELF32 LE
         eh, idata = idata[:52], idata[52:]
         e_shnum, e_shstrndx = struct.unpack("<HH", eh[48:52])
         assert e_shstrndx + 3 == e_shnum
         ##eh = eh[:48] + struct.pack("<HH", e_shnum - 3, e_shstrndx)
-    elif idata[4:7] == "\x01\x02\x01":
+    elif idata[4:7] == "\x01\x02\x01".encode():
         # ELF32 BE
         eh, idata = idata[:52], idata[52:]
         e_shnum, e_shstrndx = struct.unpack(">HH", eh[48:52])
         assert e_shstrndx + 3 == e_shnum
-    elif idata[4:7] == "\x02\x01\x01":
+    elif idata[4:7] == "\x02\x01\x01".encode():
         # ELF64 LE
         eh, idata = idata[:64], idata[64:]
         e_shnum, e_shstrndx = struct.unpack("<HH", eh[60:64])
-        assert e_shstrndx + 3 == e_shnum
-    elif idata[4:7] == "\x02\x02\x01":
+        assert e_shstrndx + 3 >= e_shnum
+    elif idata[4:7] == "\x02\x02\x01".encode():
         # ELF64 BE
         eh, idata = idata[:64], idata[64:]
         e_shnum, e_shstrndx = struct.unpack(">HH", eh[60:64])
@@ -167,7 +167,7 @@ def do_file(fn):
         raise Exception("%s is not %s" % (fn, "ELF"))
 
     odata = None
-    pos = idata.find("\0.symtab\0.strtab\0.shstrtab\0")
+    pos = idata.find("\0.symtab\0.strtab\0.shstrtab\0".encode())
     if opts.with_dump:
         eh, odata = strip_with_dump(opts.with_dump, eh, idata)
         # Other compilers can intermix the contents of .rela sections
@@ -177,6 +177,8 @@ def do_file(fn):
         if re.search(r"^powerpc64", os.path.basename(fn)):
             assert pos >= len(odata), ("unexpected strip_with_dump", pos, len(odata))
         elif re.search(r"^arm64-", os.path.basename(fn)):
+            assert pos >= len(odata), ("unexpected strip_with_dump", pos, len(odata))
+        elif re.search(r"^riscv", os.path.basename(fn)):
             assert pos >= len(odata), ("unexpected strip_with_dump", pos, len(odata))
         else:
             assert pos == len(odata), ("unexpected strip_with_dump", pos, len(odata))

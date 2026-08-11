@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 2000-2025 John F. Reiser
+;  Copyright (C) John F. Reiser
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -58,8 +58,7 @@
 #define __NR_mmap     90
 #define __NR_munmap   91
 
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
         pop ebp  // get_fexp
         pop ecx  // get_funf
@@ -85,7 +84,7 @@ L330:
         mov ebx,[a_val + esi]
         push ebx  // save &Elf32_Phdr of compressed data
 
-        sub esp, MAX_ELF_HDR_32 + OVERHEAD  // working storage
+        sub esp, MAX_ELF_HDR_32  // working storage
         mov edx, esp
         push ecx  // get_funf  9th param to pti_main
         lea eax, [2*szElf32_Phdr + szl_info + szp_info + ebx]  // 1st &b_info
@@ -97,7 +96,7 @@ L330:
         pusha  // (AT_table, sz_cpr, get_fexp, &tmp_ehdr, {sz_unc, &tmp}, {sz_cpr, &b1st_info} )
 .extern pti_main
         call pti_main  // returns entry address
-        add esp, 9*4 + MAX_ELF_HDR_32 + OVERHEAD  // remove 9 params, temp space
+        add esp, 9*4 + MAX_ELF_HDR_32  // remove 9 params, temp space
         pop ebx  // &Elf32_Phdr
         push eax  // save entry address
         mov ecx,[p_memsz + ebx]

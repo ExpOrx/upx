@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2002-2025 Jens Medoch
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) Jens Medoch
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -120,8 +120,8 @@ protected:
     unsigned sz_lunc = 0, sz_lcpr = 0;
     unsigned pad_code = 0;
     unsigned bss_start = 0, bss_end = 0;
-    // filesize-PS_HDR_SIZE
-    unsigned fdata_size = 0;
+    unsigned fdata_size = 0; // file_size - PS_HDR_SIZE
+    MemBuffer mb_cprLoader;
 };
 
 /* vim:set ts=4 sw=4 et: */

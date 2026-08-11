@@ -198,7 +198,7 @@ ifneq ($(wildcard $(WATCOM)/binl/wcl),)
 
 # step 3: clean asm
 lzma_d_c%.S : tmp/lzma_d_c%.i cleanasm.py $(MAKEFILE_LIST)
-	$(PYTHON) cleanasm.py --label-prefix=$(LABEL_PREFIX) $< $@
+	$(PYTHON2) cleanasm.py --label-prefix=$(LABEL_PREFIX) $< $@
 
 # step 2: compile, strip and disasm
 tmp/lzma_d_c%.i : tmp/lzma_d_c%.S $(MAKEFILE_LIST)
@@ -233,7 +233,7 @@ ifneq ($(wildcard $(WATCOM)/binl/wcl),)
 	$(call tc,wdis) tmp/$T_wc.obj | $(RTRIM) > tmp/$T_wc.obj.disasm
 endif
 # convert
-	$(PYTHON) wdis2gas.py tmp/$T_wc.obj.disasm $@
+	$(PYTHON2) wdis2gas.py tmp/$T_wc.obj.disasm $@
 
 .PRECIOUS: tmp/lzma_d_c%.i tmp/lzma_d_c%.S
 

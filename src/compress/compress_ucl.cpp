@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -248,8 +248,9 @@ static void __UCL_CDECL my_free(ucl_voidp p) { free(p); }
 } // extern "C"
 
 int upx_ucl_init(void) {
-#if (ACC_CC_MSC && ACC_ARCH_I386) && (_MSC_VER >= 1940)
-    (void) ucl_init(); // TODO later
+#if 1 && (ACC_CC_MSC && ACC_ARCH_I386) && (_MSC_VER >= 1940)
+    // @COMPILER_BUG @MSVC_BUG
+    (void) ucl_init();
 #else
     if (ucl_init() != UCL_E_OK)
         return -1;

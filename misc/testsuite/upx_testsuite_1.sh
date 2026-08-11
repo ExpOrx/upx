@@ -19,6 +19,8 @@ argv0=$0; argv0abs=$(readlink -fn "$argv0"); argv0dir=$(dirname "$argv0abs")
 # see https://github.com/upx/upx-testsuite.git
 #
 
+ulimit -a || true
+
 #***********************************************************************
 # init & checks
 #***********************************************************************

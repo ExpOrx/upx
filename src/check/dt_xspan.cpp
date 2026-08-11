@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -101,9 +101,6 @@ TEST_CASE("basic xspan usage") {
         CHECK(b0.raw_size_in_bytes() == 0u);
         CHECK(bp.raw_size_in_bytes() == 0u);
 #endif
-        CHECK(raw_bytes(b0, 999999) == buf);
-        CHECK(raw_bytes(bp, 999999) == buf);
-
         CHECK(raw_bytes(c0, 4) == buf);
         CHECK(raw_index_bytes(c0, 1, 3) == buf + 1);
         CHECK(raw_bytes(cp, 4) == buf);
@@ -180,9 +177,6 @@ TEST_CASE("basic xspan usage") {
         CHECK(b0.raw_size_in_bytes() == 0u);
         CHECK(bp.raw_size_in_bytes() == 0u);
 #endif
-        CHECK(raw_bytes(b0, 999999) == buf);
-        CHECK(raw_bytes(bp, 999999) == buf);
-
         CHECK(raw_bytes(c0, 4) == buf);
         CHECK(raw_index_bytes(c0, 1, 3) == buf + 1);
         CHECK(raw_bytes(cp, 4) == buf);
@@ -275,6 +269,12 @@ TEST_CASE("xspan array access") {
 **************************************************************************/
 
 #if (WITH_XSPAN >= 2) && DEBUG
+
+TEST_CASE("XSPAN_CONFIG_ENABLE_DEBUG") {
+#if XSPAN_CONFIG_ENABLE_DEBUG
+    CHECK(true);
+#endif
+}
 
 TEST_CASE("PtrOrSpanOrNull") {
     char real_buf[2 + 6 + 2] = {126, 127, 0, 1, 2, 3, 4, 5, 124, 125};
@@ -877,6 +877,197 @@ TEST_CASE("PtrOrSpan int") {
 }
 
 /*************************************************************************
+// xspan global overloads
+**************************************************************************/
+
+#ifdef UPX_VERSION_HEX
+
+namespace {
+template <class T>
+static noinline void check_bele_a(const T &mb, size_t i) {
+    if (i < 2) {
+        CHECK_THROWS(get_ne16(mb));
+        CHECK_THROWS(get_be16(mb));
+        CHECK_THROWS(get_le16(mb));
+        CHECK_THROWS(set_ne16(mb, 0));
+        CHECK_THROWS(set_be16(mb, 0));
+        CHECK_THROWS(set_le16(mb, 0));
+    } else {
+        CHECK_NOTHROW(get_ne16(mb));
+        CHECK_NOTHROW(get_be16(mb));
+        CHECK_NOTHROW(get_le16(mb));
+        CHECK_NOTHROW(set_ne16(mb, 0));
+        CHECK_NOTHROW(set_be16(mb, 0));
+        CHECK_NOTHROW(set_le16(mb, 0));
+    }
+    if (i < 3) {
+        CHECK_THROWS(get_ne24(mb));
+        CHECK_THROWS(get_be24(mb));
+        CHECK_THROWS(get_le24(mb));
+        CHECK_THROWS(set_ne24(mb, 0));
+        CHECK_THROWS(set_be24(mb, 0));
+        CHECK_THROWS(set_le24(mb, 0));
+    } else {
+        CHECK_NOTHROW(get_ne24(mb));
+        CHECK_NOTHROW(get_be24(mb));
+        CHECK_NOTHROW(get_le24(mb));
+        CHECK_NOTHROW(set_ne24(mb, 0));
+        CHECK_NOTHROW(set_be24(mb, 0));
+        CHECK_NOTHROW(set_le24(mb, 0));
+    }
+    if (i < 4) {
+        CHECK_THROWS(get_ne32(mb));
+        CHECK_THROWS(get_be32(mb));
+        CHECK_THROWS(get_le32(mb));
+        CHECK_THROWS(set_ne32(mb, 0));
+        CHECK_THROWS(set_be32(mb, 0));
+        CHECK_THROWS(set_le32(mb, 0));
+    } else {
+        CHECK_NOTHROW(get_ne32(mb));
+        CHECK_NOTHROW(get_be32(mb));
+        CHECK_NOTHROW(get_le32(mb));
+        CHECK_NOTHROW(set_ne32(mb, 0));
+        CHECK_NOTHROW(set_be32(mb, 0));
+        CHECK_NOTHROW(set_le32(mb, 0));
+    }
+    if (i < 8) {
+        CHECK_THROWS(get_ne64(mb));
+        CHECK_THROWS(get_be64(mb));
+        CHECK_THROWS(get_le64(mb));
+        CHECK_THROWS(set_ne64(mb, 0));
+        CHECK_THROWS(set_be64(mb, 0));
+        CHECK_THROWS(set_le64(mb, 0));
+    } else {
+        CHECK_NOTHROW(get_ne64(mb));
+        CHECK_NOTHROW(get_be64(mb));
+        CHECK_NOTHROW(get_le64(mb));
+        CHECK_NOTHROW(set_ne64(mb, 0));
+        CHECK_NOTHROW(set_be64(mb, 0));
+        CHECK_NOTHROW(set_le64(mb, 0));
+    }
+    (void) mb;
+}
+template <class T>
+static noinline void check_bele_c(const T &mb, size_t i) {
+    if (i < 2) {
+        CHECK_THROWS(get_ne16(mb));
+        CHECK_THROWS(get_be16(mb));
+        CHECK_THROWS(get_le16(mb));
+    } else {
+        CHECK_NOTHROW(get_ne16(mb));
+        CHECK_NOTHROW(get_be16(mb));
+        CHECK_NOTHROW(get_le16(mb));
+    }
+    if (i < 3) {
+        CHECK_THROWS(get_ne24(mb));
+        CHECK_THROWS(get_be24(mb));
+        CHECK_THROWS(get_le24(mb));
+    } else {
+        CHECK_NOTHROW(get_ne24(mb));
+        CHECK_NOTHROW(get_be24(mb));
+        CHECK_NOTHROW(get_le24(mb));
+    }
+    if (i < 4) {
+        CHECK_THROWS(get_ne32(mb));
+        CHECK_THROWS(get_be32(mb));
+        CHECK_THROWS(get_le32(mb));
+    } else {
+        CHECK_NOTHROW(get_ne32(mb));
+        CHECK_NOTHROW(get_be32(mb));
+        CHECK_NOTHROW(get_le32(mb));
+    }
+    if (i < 8) {
+        CHECK_THROWS(get_ne64(mb));
+        CHECK_THROWS(get_be64(mb));
+        CHECK_THROWS(get_le64(mb));
+    } else {
+        CHECK_NOTHROW(get_ne64(mb));
+        CHECK_NOTHROW(get_be64(mb));
+        CHECK_NOTHROW(get_le64(mb));
+    }
+    (void) mb;
+}
+} // namespace
+
+#endif // UPX_VERSION_HEX
+
+TEST_CASE("xspan global overloads") {
+    byte buf_a[16] = {};
+    const byte buf_c[16] = {};
+
+    for (size_t i = 0; i < 16; i++) {
+        XSPAN_0_VAR(byte, a0, buf_a, i);
+        XSPAN_P_VAR(byte, ap, buf_a, i);
+        XSPAN_S_VAR(byte, as, buf_a, i);
+
+        XSPAN_0_VAR(const byte, c0, buf_c, i);
+        XSPAN_P_VAR(const byte, cp, buf_c, i);
+        XSPAN_S_VAR(const byte, cs, buf_c, i);
+
+#ifdef UPX_VERSION_HEX
+        check_bele_a(a0, i);
+        check_bele_a(ap, i);
+        check_bele_a(as, i);
+
+        check_bele_c(c0, i);
+        check_bele_c(cp, i);
+        check_bele_c(cs, i);
+
+        CHECK_THROWS(upx_adler32(a0, i + 1));
+        CHECK_THROWS(upx_adler32(ap, i + 1));
+        CHECK_THROWS(upx_adler32(as, i + 1));
+        CHECK_THROWS(upx_adler32(c0, i + 1));
+        CHECK_THROWS(upx_adler32(cp, i + 1));
+        CHECK_THROWS(upx_adler32(cs, i + 1));
+
+        if (i == 0) {
+            CHECK_THROWS(upx_safe_strlen(a0));
+            CHECK_THROWS(upx_safe_strlen(ap));
+            CHECK_THROWS(upx_safe_strlen(as));
+            CHECK_THROWS(upx_safe_strlen(c0));
+            CHECK_THROWS(upx_safe_strlen(cp));
+            CHECK_THROWS(upx_safe_strlen(cs));
+        }
+#endif
+
+        CHECK_THROWS(memchr(a0, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memchr(ap, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memchr(as, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memchr(c0, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memchr(cp, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memchr(cs, 0, i + 1)); // NOLINT(bugprone-unused-return-value)
+
+        CHECK(memcmp(a0, a0, i) == 0);
+        CHECK(memcmp(ap, a0, i) == 0);
+        CHECK(memcmp(as, a0, i) == 0);
+        CHECK_THROWS(memcmp(a0, a0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memcmp(ap, a0, i + 1)); // NOLINT(bugprone-unused-return-value)
+        CHECK_THROWS(memcmp(as, a0, i + 1)); // NOLINT(bugprone-unused-return-value)
+
+        CHECK_NOTHROW(memcpy(a0, c0, i));
+        CHECK_NOTHROW(memcpy(ap, cp, i));
+        CHECK_NOTHROW(memcpy(as, cs, i));
+        CHECK_THROWS(memcpy(a0, c0, i + 1));
+        CHECK_THROWS(memcpy(ap, cp, i + 1));
+        CHECK_THROWS(memcpy(as, cs, i + 1));
+
+        CHECK_NOTHROW(memmove(a0, c0, i));
+        CHECK_NOTHROW(memmove(ap, cp, i));
+        CHECK_NOTHROW(memmove(as, cs, i));
+        CHECK_THROWS(memmove(a0, c0, i + 1));
+        CHECK_THROWS(memmove(ap, cp, i + 1));
+        CHECK_THROWS(memmove(as, cs, i + 1));
+
+        CHECK_NOTHROW(memset(a0, 255, i));
+        CHECK_NOTHROW(memset(ap, 255, i));
+        CHECK_NOTHROW(memset(as, 255, i));
+        CHECK_THROWS(memset(a0, 254, i + 1));
+        CHECK_THROWS(memset(ap, 254, i + 1));
+        CHECK_THROWS(memset(as, 254, i + 1));
+    }
+}
+
+/*************************************************************************
 // codegen
 **************************************************************************/
 
@@ -951,11 +1142,16 @@ TEST_CASE("decltype integral constants") {
     static_assert((std::is_same<decltype(0ull), unsigned long long>::value), "");
     static_assert((std::is_same<decltype((char) 0), char>::value), "");
     static_assert((std::is_same<decltype((short) 0), short>::value), "");
+    static_assert((std::is_same<decltype((int) 0), int>::value), "");
     static_assert((std::is_same<decltype((long) 0), long>::value), "");
     static_assert((std::is_same<decltype((long long) 0), long long>::value), "");
     static_assert((std::is_same<decltype(char(0)), char>::value), "");
     static_assert((std::is_same<decltype(short(0)), short>::value), "");
+    static_assert((std::is_same<decltype(int(0)), int>::value), "");
     static_assert((std::is_same<decltype(long(0)), long>::value), "");
+    //// static_assert((std::is_same<decltype(long long(0)), long long>::value), "");
+    using my_llong = long long;
+    static_assert((std::is_same<decltype(my_llong(0)), long long>::value), "");
 }
 
 TEST_CASE("decltype pointer") {

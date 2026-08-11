@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -162,6 +162,7 @@ struct Options final {
         bool android_shlib;     // keep some ElfXX_Shdr for dlopen()
         bool android_old;       // < Android_10 ==> no memfd_create, inconsistent __NR_ftruncate
         bool force_pie;         // choose DF_1_PIE instead of is_shlib
+        bool catch_sigsegv;     // to debug hardware or de-compressor
     } o_unix;
     struct {
         bool boot_only;
@@ -182,7 +183,7 @@ struct Options final {
     } win32_pe;
 
 private: // UPX conventions
-    UPX_CXX_DISABLE_NEW_DELETE(Options)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(Options)
 };
 
 /* vim:set ts=4 sw=4 et: */

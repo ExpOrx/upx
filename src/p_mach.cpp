@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 2004-2025 John Reiser
+   Copyright (C) John Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -487,7 +487,7 @@ PackMachBase<T>::buildMachLoader(
     Filter const *ft
 )
 {
-    initLoader(proto, szproto);
+    initLoader(0, proto, szproto);
 
     struct b_info h; memset(&h, 0, sizeof(h));
     unsigned fold_hdrlen = 0;
@@ -924,6 +924,8 @@ void PackMachBase<T>::pack4dylib(  // append PackHeader
                 fi->readx(data, len);
                 unsigned const pos = o__mod_init_func - seg->fileoff;
                 if (pos < seg->filesize) {
+                    if (sizeof(unsigned) > (seg->filesize - pos))
+                        throwCantPack("bad __mod_init_func");
                     if (*(unsigned *)(pos + data) != (unsigned)prev_mod_init_func) {
                         throwCantPack("__mod_init_func inconsistent");
                     }
@@ -1418,6 +1420,7 @@ void PackMachBase<T>::pack1(OutputFile *const fo, Filter &/*ft*/)  // generate e
         unsigned const sz_threado = threado_size();
         MemBuffer space(sz_threado); memset(space, 0, sz_threado);
         fo->write(space, sz_threado);
+        UNUSED(cmdsize);
     }
     else if (my_filetype == Mach_header::MH_DYLIB) {
         Mach_command const *ptr = (Mach_command const *)rawmseg;
@@ -1449,6 +1452,7 @@ void PackMachBase<T>::pack1(OutputFile *const fo, Filter &/*ft*/)  // generate e
         }
         memset(&linkitem, 0, sizeof(linkitem));
         fo->write(&linkitem, sizeof(linkitem));
+        UNUSED(cmdsize);
     }
     sz_mach_headers = fo->getBytesWritten();
     gap = secTEXT.offset - sz_mach_headers;
@@ -1503,12 +1507,12 @@ void PackMachBase<T>::unpack(OutputFile *fo)
         infoWarning("packed size too big; discarding appended data, keeping backup");
     }
 
-    ibuf.alloc(blocksize + OVERHEAD);
+    ibuf.alloc(blocksize + OVERHEAD + (blocksize >> ELF_NRV_FUDGE));
     b_info bhdr; memset(&bhdr, 0, sizeof(bhdr));
     fi->readx(&bhdr, sizeof(bhdr));
     ph.u_len = get_te32(&bhdr.sz_unc);
     ph.c_len = get_te32(&bhdr.sz_cpr);
-    if ((unsigned)file_size < ph.c_len || ph.c_len == 0 || ph.u_len == 0)
+    if ((unsigned)file_size < ph.c_len || ph.c_len == 0 || ph.u_len < sizeof(mhdri))
         throwCantUnpack("file header corrupted");
     ph.method = bhdr.b_method;
     if (ph.method < M_NRV2B_LE32
@@ -1539,6 +1543,8 @@ void PackMachBase<T>::unpack(OutputFile *fo)
     unsigned char const *ptr = (unsigned char const *)(1+mhdr);
     unsigned headway = mhdr_buf.getSize() - sizeof(*mhdr);
     for (unsigned j= 0; j < ncmds; ++j) {
+        if (headway < sizeof(Mach_command))
+            throwCantUnpack("bad packed Mach load_command");
         unsigned cmdsize = ((Mach_command const *)ptr)->cmdsize;
         if (is_bad_linker_command( ((Mach_command const *)ptr)->cmd, cmdsize,
                 headway, lc_seg, sizeof(Addr))) {
@@ -1580,8 +1586,12 @@ void PackMachBase<T>::unpack(OutputFile *fo)
     }
     Mach_segment_command const *sc = (Mach_segment_command const *)(void *)(1+ mhdr);
     if (my_filetype==Mach_header::MH_DYLIB) { // rest of lc_seg are not compressed
+        // rawmseg holds mhdri.ncmds load commands (canUnpack bounds-checked them),
+        // but the walk below counts with ncmds from the decompressed header
+        if (mhdri.ncmds != mhdr->ncmds)
+            throwCantUnpack("file header corrupted");
         upx_uint64_t cpr_mod_init_func(0);
-                TE32 unc_mod_init_func; *(int *)&unc_mod_init_func = 0;
+                TE32 unc_mod_init_func = {}; // *(int *)&unc_mod_init_func = 0;
         Mach_segment_command const *rc = rawmseg;
         rc = (Mach_segment_command const *)(rc->cmdsize + (char const *)rc);
         sc = (Mach_segment_command const *)(sc->cmdsize + (char const *)sc);
@@ -1605,7 +1615,10 @@ void PackMachBase<T>::unpack(OutputFile *fo)
                 MemBuffer data(len);
                 fi->readx(data, len);
                 if (!strcmp("__DATA", rc->segname)) {
-                    set_te32(&data[o__mod_init_func - rc->fileoff], unc_mod_init_func);
+                    unsigned const mif_off = o__mod_init_func - rc->fileoff;
+                    if (sizeof(unc_mod_init_func) > len || mif_off > len - sizeof(unc_mod_init_func))
+                        throwCantUnpack("bad __mod_init_func");
+                    set_te32(&data[mif_off], unc_mod_init_func);
                 }
                 if (fo)
                     fo->write(data, len);
@@ -1796,6 +1809,9 @@ tribool PackMachBase<T>::canUnpack()
             unsigned disp = *(TE32 const *)&b[1];
             if (CPU_TYPE_X86_64 == my_cputype) { // Emulate the code
                 if (0xe8==b[0] && disp < bufsize
+                    // disp and the b_info that follow it are used as raw offsets
+                    // into buf3, which holds only bufsize bytes that were read.
+                    && (disp + 11 + sizeof(struct b_info)) <= bufsize
                     // This has been obsoleted by amd64-darwin.macho-entry.S
                     // searching for "executable_path=" etc.
                 &&  0x5d==b[5+disp] && 0xe8==b[6+disp]) {
@@ -1804,7 +1820,11 @@ tribool PackMachBase<T>::canUnpack()
                         struct b_info const *bptr = (struct b_info const *)&b[11+disp];
                         // This is the folded stub.
                         // FIXME: check b_method?
-                        if (bptr->sz_cpr < bptr->sz_unc && bptr->sz_unc < 0x1000) {
+                        if (bptr->sz_cpr < bptr->sz_unc && bptr->sz_unc < 0x1000
+                            // overlay_offset is read at (32 + b); keep that read
+                            // inside the bytes that were read into buf3.
+                        && ((11 + disp + sizeof(struct b_info) + (unsigned) bptr->sz_cpr)
+                                + 32 + sizeof(TE32)) <= bufsize) {
                             b = bptr->sz_cpr + (unsigned char const *)(1+ bptr);
                             // FIXME: check PackHeader::putPackHeader(), packhead.cpp
                             overlay_offset = *(TE32 const *)(32 + b);
@@ -2014,6 +2034,18 @@ tribool PackMachBase<T>::canPack()
         headway -= cmdsize;
         if (lc_seg == cmd) {
             msegcmd[j] = *segptr;
+            // is_bad_linker_command() only checks that cmdsize encodes a whole
+            // number of sections; the nsects field itself is never compared
+            // against cmdsize. pack4dylib() later walks segptr->nsects section
+            // commands from (1+ segptr), so an inflated nsects reads past the
+            // end of rawmseg. Require the two to agree.
+            unsigned const segcmdsize = lc_seg_info[sizeof(Addr) >> 3].segcmdsize;
+            unsigned const seccmdsize = lc_seg_info[sizeof(Addr) >> 3].seccmdsize;
+            if (seccmdsize == 0 || segptr->nsects != (cmdsize - segcmdsize) / seccmdsize) {
+                char buf[64]; snprintf(buf, sizeof(buf),
+                    "bad LC_SEGMENT[%u].nsects %#x", j, (unsigned) segptr->nsects);
+                throwCantPack(buf);
+            }
             if (!strcmp("__TEXT", segptr->segname)) {
                 Mach_section_command const *secp =
                     (Mach_section_command const *)(const void*)(const char*)(1+ segptr);

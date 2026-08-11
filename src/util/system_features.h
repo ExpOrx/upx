@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -75,6 +75,6 @@
 #define _LIBCPP_HAS_ALIGNED_ALLOCATION         0
 #endif
 #endif
-#endif
+#endif // _LIBCPP_HAS_NO_LIBRARY_ALIGNED_ALLOCATION
 
 /* vim:set ts=4 sw=4 et: */

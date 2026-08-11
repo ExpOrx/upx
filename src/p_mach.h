@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -25,10 +25,7 @@
    <markus@oberhumer.com>               <ezerotven+github@gmail.com>
  */
 
-
 #pragma once
-#ifndef __UPX_P_MACHO_H
-#define __UPX_P_MACHO_H 1
 
 #include "conf.h"
 
@@ -1390,7 +1387,5 @@ struct version_min_command {
     upx_uint32_t version;
     upx_uint32_t sdk;
 };
-
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

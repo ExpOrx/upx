@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -51,8 +51,8 @@ public:
                                                 void *user) may_throw;
 
 private:
-    static PackerBase *getPacker(InputFile *f) may_throw;
-    static PackerBase *getUnpacker(InputFile *f) may_throw;
+    static noinline PackerBase *getPacker(InputFile *f) may_throw;
+    static noinline PackerBase *getUnpacker(InputFile *f) may_throw;
 
     OwningPointer(PackerBase) packer = nullptr; // owner
     InputFile *const fi;                        // reference, required
@@ -63,7 +63,7 @@ private:
 private: // UPX conventions
     UPX_CXX_DISABLE_ADDRESS(PackMaster)
     UPX_CXX_DISABLE_COPY_MOVE(PackMaster)
-    UPX_CXX_DISABLE_NEW_DELETE(PackMaster)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(PackMaster)
 };
 
 /* vim:set ts=4 sw=4 et: */

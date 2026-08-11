@@ -3,7 +3,7 @@
 ;
 ;  This file is part of the UPX executable compressor.
 ;
-;  Copyright (C) 2000-2025 John F. Reiser
+;  Copyright (C) John F. Reiser
 ;  All Rights Reserved.
 ;
 ;  UPX and the UCL library are free software; you can redistribute them
@@ -211,15 +211,14 @@ no_env_pse:
         pop eax; and eax,~(is_ptinterp | unmap_all_pages)  // ADRX: &b_info
         pop esi  // LENX: total_size
         pop ebp  // elfaddr
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
-        sub esp, MAX_ELF_HDR_32 + OVERHEAD  // alloca
+#include "../../MAX_ELF_HDR.h"
+        sub esp, MAX_ELF_HDR_32  // alloca
         push esp  // &tmp
         push edi  // &final_auxv[0]
         push ebp  // elfaddr
         push esi  // LENX total size
         push eax  // ADRX &b_info
-        call upx_main  // returns entry address
+        call upx_main2  // returns entry address
           // leave 5 params on stack until de-alloca below
         mov esi,eax  // esi= entry;  edi= auxv; ebp= elfaddr
 
@@ -234,7 +233,7 @@ no_env_pse:
 // Buggy programs may depend on uninit stack being 0, so clear what we used.
         mov edx,edi  // save auxv
         mov edi,esp
-        mov ecx,(5*NBPW + MAX_ELF_HDR_32 + OVERHEAD) >>2  // 5 params, de-alloca
+        mov ecx,(5*NBPW + MAX_ELF_HDR_32) >>2  // 5 params, de-alloca
         xor eax,eax  // 0
         rep stosd  // clear frame on exit
         mov esp,edi  // end of frame

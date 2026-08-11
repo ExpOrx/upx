@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -92,7 +92,7 @@ XSPAN_FWD_TU_VOIDPTR(int) memcmp(const C<T> &a, const E<U> &b, size_t n) {
 #endif
 
 template <class T>
-inline void *memcpy(C<T> a, const void *b, size_t n) {
+inline void *memcpy(const C<T> a, const void *b, size_t n) {
     return memcpy(a.raw_bytes(n), b, n);
 }
 template <class T>
@@ -114,7 +114,7 @@ XSPAN_FWD_TU_VOIDPTR(void *) memcpy(const C<T> &a, const E<U> &b, size_t n) {
 #endif
 
 template <class T>
-inline void *memmove(C<T> a, const void *b, size_t n) {
+inline void *memmove(const C<T> a, const void *b, size_t n) {
     return memmove(a.raw_bytes(n), b, n);
 }
 template <class T>
@@ -204,6 +204,10 @@ inline unsigned get_ne16(const C<T> &a) {
     return get_ne16(a.raw_bytes(2));
 }
 template <class T>
+inline unsigned get_ne24(const C<T> &a) {
+    return get_ne24(a.raw_bytes(3));
+}
+template <class T>
 inline unsigned get_ne32(const C<T> &a) {
     return get_ne32(a.raw_bytes(4));
 }
@@ -215,6 +219,10 @@ inline upx_uint64_t get_ne64(const C<T> &a) {
 template <class T>
 inline unsigned get_be16(const C<T> &a) {
     return get_be16(a.raw_bytes(2));
+}
+template <class T>
+inline unsigned get_be24(const C<T> &a) {
+    return get_be24(a.raw_bytes(3));
 }
 template <class T>
 inline unsigned get_be32(const C<T> &a) {
@@ -244,87 +252,95 @@ inline upx_uint64_t get_le64(const C<T> &a) {
 
 template <class T>
 inline void set_ne16(const C<T> &a, unsigned v) {
-    return set_ne16(a.raw_bytes(2), v);
+    set_ne16(a.raw_bytes(2), v);
+}
+template <class T>
+inline void set_ne24(const C<T> &a, unsigned v) {
+    set_ne24(a.raw_bytes(3), v);
 }
 template <class T>
 inline void set_ne32(const C<T> &a, unsigned v) {
-    return set_ne32(a.raw_bytes(4), v);
+    set_ne32(a.raw_bytes(4), v);
 }
 template <class T>
 inline void set_ne64(const C<T> &a, upx_uint64_t v) {
-    return set_ne64(a.raw_bytes(8), v);
+    set_ne64(a.raw_bytes(8), v);
 }
 
 template <class T>
 inline void set_be16(const C<T> &a, unsigned v) {
-    return set_be16(a.raw_bytes(2), v);
+    set_be16(a.raw_bytes(2), v);
+}
+template <class T>
+inline void set_be24(const C<T> &a, unsigned v) {
+    set_be24(a.raw_bytes(3), v);
 }
 template <class T>
 inline void set_be32(const C<T> &a, unsigned v) {
-    return set_be32(a.raw_bytes(4), v);
+    set_be32(a.raw_bytes(4), v);
 }
 template <class T>
 inline void set_be64(const C<T> &a, upx_uint64_t v) {
-    return set_be64(a.raw_bytes(8), v);
+    set_be64(a.raw_bytes(8), v);
 }
 
 template <class T>
 inline void set_le16(const C<T> &a, unsigned v) {
-    return set_le16(a.raw_bytes(2), v);
+    set_le16(a.raw_bytes(2), v);
 }
 template <class T>
 inline void set_le24(const C<T> &a, unsigned v) {
-    return set_le24(a.raw_bytes(3), v);
+    set_le24(a.raw_bytes(3), v);
 }
 template <class T>
 inline void set_le32(const C<T> &a, unsigned v) {
-    return set_le32(a.raw_bytes(4), v);
+    set_le32(a.raw_bytes(4), v);
 }
 template <class T>
 inline void set_le64(const C<T> &a, upx_uint64_t v) {
-    return set_le64(a.raw_bytes(8), v);
+    set_le64(a.raw_bytes(8), v);
 }
 
 #ifndef XSPAN_FWD_C_IS_MEMBUFFER
 template <class T>
 inline C<T> operator+(const C<T> &a, const BE16 &v) {
-    return a + unsigned(v);
+    return a + size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator+(const C<T> &a, const BE32 &v) {
-    return a + unsigned(v);
+    return a + size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator+(const C<T> &a, const LE16 &v) {
-    return a + unsigned(v);
+    return a + size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator+(const C<T> &a, const LE32 &v) {
-    return a + unsigned(v);
+    return a + size_t(unsigned(v));
 }
 
 template <class T>
 inline C<T> operator-(const C<T> &a, const BE16 &v) {
-    return a - unsigned(v);
+    return a - size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator-(const C<T> &a, const BE32 &v) {
-    return a - unsigned(v);
+    return a - size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator-(const C<T> &a, const LE16 &v) {
-    return a - unsigned(v);
+    return a - size_t(unsigned(v));
 }
 template <class T>
 inline C<T> operator-(const C<T> &a, const LE32 &v) {
-    return a - unsigned(v);
+    return a - size_t(unsigned(v));
 }
 #endif // XSPAN_FWD_C_IS_MEMBUFFER
 
 template <class T>
-typename std::enable_if<sizeof(T) == 1, upx_rsize_t>::type upx_safe_strlen(const C<T> &a) {
+inline typename std::enable_if<sizeof(T) == 1, upx_rsize_t>::type upx_safe_strlen(const C<T> &a) {
     // not fully checked, but can require at least 1 byte
-    upx_rsize_t len = upx_safe_strlen(a.raw_bytes(1));
+    const upx_rsize_t len = upx_safe_strlen(a.raw_bytes(1));
     (void) a.raw_bytes(len + 1); // now can do a full check
     return len;
 }

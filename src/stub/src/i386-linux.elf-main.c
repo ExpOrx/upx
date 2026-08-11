@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -334,9 +334,9 @@ ERR_LAB
                 (unsigned char *)xo->buf, &out_len,
 #if defined(__i386__) //{
                 *(int *)(void *)&h.b_method
-#else
+#else  //}{
                 h.b_method
-#endif
+#endif  //}
                 );
             if (j != 0 || out_len != (nrv_uint)h.sz_unc)
                 err_exit(7);
@@ -595,14 +595,8 @@ ERR_LAB
         ) >> ((pf & (PF_R|PF_W|PF_X))<<2) ))
 
 
-#if defined(__powerpc__) || defined(__arm__)   //{
 extern
 size_t get_page_mask(void);  // variable page size AT_PAGESZ; see *-fold.S
-#elif defined(__mips__)  //}{
-    // empty
-#else  //}{  // FIXME for __mips__
-size_t get_page_mask(void) { return PAGE_MASK; }  // compile-time constant
-#endif  //}
 
 // Find convex hull of PT_LOAD (the minimal interval which covers all PT_LOAD),
 // and mmap that much, to be sure that a kernel using exec-shield-randomize

@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_djgpp2.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -43,8 +45,10 @@ static const CLANG_FORMAT_DUMMY_STATEMENT
 
 PackDjgpp2::PackDjgpp2(InputFile *f) : super(f), coff_offset(0) {
     bele = &N_BELE_RTP::le_policy;
+    COMPILE_TIME_ASSERT(sizeof(dos_header_t) == 64)
     COMPILE_TIME_ASSERT(sizeof(external_scnhdr_t) == 40)
     COMPILE_TIME_ASSERT(sizeof(coff_header_t) == 0xa8)
+    COMPILE_TIME_ASSERT_ALIGNED1(dos_header_t)
     COMPILE_TIME_ASSERT_ALIGNED1(external_scnhdr_t)
     COMPILE_TIME_ASSERT_ALIGNED1(coff_header_t)
     COMPILE_TIME_ASSERT(sizeof(stub_i386_dos32_djgpp2_stubify) == 2048)
@@ -75,7 +79,7 @@ unsigned PackDjgpp2::findOverlapOverhead(const byte *buf, const byte *tbuf, unsi
 
 void PackDjgpp2::buildLoader(const Filter *ft) {
     // prepare loader
-    initLoader(stub_i386_dos32_djgpp2, sizeof(stub_i386_dos32_djgpp2));
+    initLoader(EM_386, stub_i386_dos32_djgpp2, sizeof(stub_i386_dos32_djgpp2));
     addLoader("IDENTSTR,DJ2MAIN1", ft->id ? "DJCALLT1" : "",
               ph.first_offset_found == 1 ? "DJ2MAIN2" : "",
               M_IS_LZMA(ph.method) ? "LZMA_INIT_STACK" : "", getDecompressorSections(),

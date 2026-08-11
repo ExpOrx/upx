@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -39,11 +39,12 @@ struct PackHeader final {
     ~PackHeader() noexcept = default;
 
     void reset() noexcept;
+    int set_method(int m, unsigned offset = 0); // check, then assign
+
+    int getPackHeaderSize() const;
 
     void putPackHeader(SPAN_S(byte) p) const;
     bool decodePackHeaderFromBuf(SPAN_S(const byte) b, int blen);
-
-    int getPackHeaderSize() const;
 
     // fields stored in compressed file => see stub/src/include/header.S
     // enum { magic = UPX_MAGIC_LE32 };
@@ -63,7 +64,6 @@ struct PackHeader final {
         int n_mru;       // specific name for filter ctojr
     };
     int header_checksum;
-    int set_method(int m, unsigned offset = 0); // check, then assign
 
     // support fields for verifying decompression
     unsigned saved_u_adler;
@@ -88,7 +88,7 @@ struct PackHeader final {
 
 private: // UPX conventions
     UPX_CXX_DISABLE_ADDRESS(PackHeader)
-    UPX_CXX_DISABLE_NEW_DELETE(PackHeader)
+    UPX_CXX_DISABLE_NEW_DELETE_NO_VIRTUAL(PackHeader)
 };
 
 /*************************************************************************

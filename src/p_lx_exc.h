@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -28,11 +28,7 @@
    <jreiser@users.sourceforge.net>
  */
 
-
 #pragma once
-#ifndef __UPX_P_LX_EXC_H
-#define __UPX_P_LX_EXC_H 1
-
 
 /*************************************************************************
 // linux/386 (generic "execve" format)
@@ -144,6 +140,5 @@ protected:
 
     virtual void buildLoader(const Filter *) override;
 };
-#endif /* already included */
 
 /* vim:set ts=4 sw=4 et: */

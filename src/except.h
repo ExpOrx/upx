@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -200,14 +200,14 @@ noreturn void throwEOFException(const char *msg = nullptr, int e = 0) may_throw;
 // some C++ template wizardry is needed to overload throwCantPack() for varargs
 template <class T>
 void throwCantPack(const T *, ...) DELETED_FUNCTION;
-template <>
-noreturn void throwCantPack(const char *format, ...) may_throw attribute_format(1, 2);
 template <class T>
 void throwCantUnpack(const T *, ...) DELETED_FUNCTION;
-template <>
-noreturn void throwCantUnpack(const char *format, ...) may_throw attribute_format(1, 2);
 template <class T>
 void throwInternalError(const T *, ...) DELETED_FUNCTION;
+template <>
+noreturn void throwCantPack(const char *format, ...) may_throw attribute_format(1, 2);
+template <>
+noreturn void throwCantUnpack(const char *format, ...) may_throw attribute_format(1, 2);
 template <>
 noreturn void throwInternalError(const char *format, ...) may_throw attribute_format(1, 2);
 

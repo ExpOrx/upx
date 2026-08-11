@@ -2,7 +2,7 @@
 //
 //  This file is part of the UPX executable compressor.
 //
-//  Copyright (C) 2000-2025 John F. Reiser
+//  Copyright (C) John F. Reiser
 //  All Rights Reserved.
 //
 //  UPX and the UCL library are free software; you can redistribute them
@@ -81,19 +81,18 @@ PATH_MAX= 4096
 //@ control just falls through, after this part and compiled C code
 //@ are uncompressed.
 
-#define OVERHEAD 2048
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 
-PAGE_MASK: .quad ~0<<12  // default
-get_page_mask: .globl get_page_mask
+PAGE_MASK: .quad ~0<<12  // default  D_PMASK
+cancel_sigsegv: .quad 0  // D_XSIGSEGV
+
+get_page_mask: .globl get_page_mask  // D_GETPM
         ldr x0,PAGE_MASK
         ret
-
-bits_privanon:  // known offset (NBPW + 2*4)
+bits_privanon:  // known offset (2*NBPW + 2*4)  D_PRIVANON
         .int MAP_PRIVATE | MAP_ANONYMOUS  // Linux default; else QNX
 
-fold_begin:  // known offset (NBPW + 3*4)
-////    bkpt  // DEBUG
+fold_begin:  // known offset D_FOLD = (2*NBPW + 3*4)
         b L10
 
 // In:  sp/ PMASK,LENC,ADRU,LENU, x0,x1, argc,argv,...
@@ -102,7 +101,7 @@ wLENC  .req w29  // compressed input
   xLENC  .req x29
 xADRC  .req x28
 
-wLENU  .req w27  // unfolded fold_begin and upx_main
+wLENU  .req w27  // unfolded fold_begin and upx_main2
   xLENU  .req x27
 xADRU  .req x26
 
@@ -205,11 +204,11 @@ L10:
         b no_buf_pse
 
 yes_buf_pse:
-        sub x0,x1,#PATH_MAX // buffer for readlink
-        sub x6,x0,#4  // space for copy of space3eq
+        sub x0,sp,#PATH_MAX // alloc buffer for readlink
+        sub x6,x0,#4  // alloc for copy of space3eq
         sub x1,x1,x6  // amount needed for x0,x1,argc,argv,env,auxv
-        sub x0,x6,x1  // space for x0,x1,argc,argv,env,auxv
-        sub x0,x0,#NBPW  // room for added env ptr
+        sub x0,x6,x1  //         alloc for x0,x1,argc,argv,env,auxv
+        sub x0,x0,#NBPW  // alloc for added env ptr
         and x0,x0,#~0<<4  // sp must be 16-byte aligned
         add x1,sp,#3*NBPW  // old_argv; avoid 0==argc impostor for terminator of argv
         mov sp,x0  // new_sp
@@ -260,16 +259,19 @@ no_buf_pse:
         call open; mov wfd,w0
 no_env_pse:
 
-/* Construct arglist for upx_main */
+/* Construct arglist for upx_main2 */
         mov x4,xelfa  // Elf64_Ehdr (reloc if ET_DYN and not pre-link)
-          sub sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // alloca
+          sub sp,sp,#MAX_ELF_HDR_64  // alloca
         mov x3,xauxv  // new &Elf64_auxv_t
         mov x2,sp  // ehdr
         mov w1,wLENC  // total size of compressed data
         mov x0,xADRC  // &b_info
         call upx_main2
-          add sp,sp,#MAX_ELF_HDR_64 + OVERHEAD  // un-alloca
+          add sp,sp,#MAX_ELF_HDR_64  // un-alloca
         mov xfexp,x0  // entry address
+
+        ldr x0,cancel_sigsegv
+        blr x0  // callr
 
 // Discard pages of compressed input data (includes [ADRC,+LENC) )
         ldr x1,[xelfa,#p_memsz+sz_Phdr+sz_Ehdr]  // Phdr[C_TEXT= 1].p_memsz

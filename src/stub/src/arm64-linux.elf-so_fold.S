@@ -2,7 +2,7 @@
 //
 //  This file is part of the UPX executable compressor.
 //
-//  Copyright (C) 2000-2025 John F. Reiser
+//  Copyright (C) John F. Reiser
 //  All Rights Reserved.
 //
 //  UPX and the UCL library are free software; you can redistribute them
@@ -28,7 +28,7 @@
 //
 
 #include "arch/arm64/v8/macros.S"
-#include "MAX_ELF_HDR.S"
+#include "../../MAX_ELF_HDR.h"
 NBPW= 8
 #define bkpt brk #0
 

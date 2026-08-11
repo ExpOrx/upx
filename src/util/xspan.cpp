@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -44,33 +44,33 @@ struct XSpanStats {
 static XSpanStats xspan_stats;
 
 // HINT: set env-var "UPX_DEBUG_DOCTEST_DISABLE=1" for improved debugging experience
-void xspan_fail_nullptr() {
+void xspan_fail_nullptr() may_throw {
     xspan_stats.fail_nullptr += 1;
     throwCantPack("xspan unexpected NULL pointer; take care!");
 }
-void xspan_fail_nullbase() {
+void xspan_fail_nullbase() may_throw {
     xspan_stats.fail_nullbase += 1;
     throwCantPack("xspan unexpected NULL base; take care!");
 }
-void xspan_fail_not_same_base() {
+void xspan_fail_not_same_base() may_throw {
     xspan_stats.fail_not_same_base += 1;
     throwCantPack("xspan unexpected base pointer; take care!");
 }
 
-void xspan_fail_range_nullptr() {
+void xspan_fail_range_nullptr() may_throw {
     xspan_stats.fail_range_nullptr += 1;
     throwCantPack("xspan_check_range: unexpected NULL pointer; take care!");
 }
-void xspan_fail_range_nullbase() {
+void xspan_fail_range_nullbase() may_throw {
     xspan_stats.fail_range_nullbase += 1;
     throwCantPack("xspan_check_range: unexpected NULL base; take care!");
 }
-void xspan_fail_range_range() {
+void xspan_fail_range_range() may_throw {
     xspan_stats.fail_range_range += 1;
     throwCantPack("xspan_check_range: pointer out of range; take care!");
 }
 
-void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_bytes) {
+void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_bytes) may_throw {
     xspan_stats.check_range_counter += 1;
     if very_unlikely (ptr == nullptr)
         xspan_fail_range_nullptr();
@@ -79,7 +79,7 @@ void xspan_check_range(const void *ptr, const void *base, ptrdiff_t size_in_byte
     upx_sptraddr_t off = ptraddr_diff(ptr, base);
     if very_unlikely (off < 0 || off > size_in_bytes || size_in_bytes > UPX_RSIZE_MAX)
         xspan_fail_range_range();
-    NO_fprintf(stderr, "xspan_check_range done\n");
+    // NO_fprintf(stderr, "xspan_check_range done %zu\n", size_t(xspan_stats.check_range_counter));
 }
 
 XSPAN_NAMESPACE_END

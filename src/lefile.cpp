@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -149,7 +149,7 @@ void LeFile::readImage() {
         throwCantPack("no soimage");
     mb_iimage.alloc(soimage);
     mb_iimage.clear();
-    iimage = mb_iimage; // => now a SPAN_S
+    iimage = SPAN_S_MAKE(byte, mb_iimage); // => now a SPAN_S
 
     unsigned ic, jc;
     for (ic = jc = 0; ic < pages; ic++) {
@@ -269,9 +269,9 @@ void LeFile::countFixups(unsigned *counts) const {
     // counts[objects]      - # of selector fixups
     // counts[objects+1]    - # of self-relative fixups
 
-    const byte *fix = ifixups;
-    const unsigned sfixups = get_le32(ifpage_table + pages);
-    unsigned ll;
+    const unsigned sfixups = mem_size(1, get_le32(ifpage_table + pages));
+    // const byte *fix = ifixups;
+    SPAN_S_VAR(const byte, fix, ifixups, sfixups);
 
     while (ptr_udiff_bytes(fix, ifixups) < sfixups) {
         if ((fix[1] & ~0x10) != 0)
@@ -290,15 +290,20 @@ void LeFile::countFixups(unsigned *counts) const {
             counts[o] += 9;
             // fall through
         case 7: // 32-bit offset
+            if (fix[4] == 0 || fix[4] > o)
+                throwCantPack("bad fixup object number");
             counts[fix[4] - 1] += 4;
             fix += (fix[1] & 0x10) ? 9 : 7;
             break;
-        case 0x27: // 32-bit offset list
-            ll = fix[2];
+        case 0x27: { // 32-bit offset list
+            unsigned ll = fix[2];
+            if (fix[3] == 0 || fix[3] > o)
+                throwCantPack("bad fixup object number");
             counts[fix[3] - 1] += ll * 4;
             fix += (fix[1] & 0x10) ? 6 : 4;
             fix += ll * 2;
             break;
+        }
         case 8: // 32-bit self relative fixup
             counts[o + 1] += 4;
             fix += (fix[1] & 0x10) ? 9 : 7;

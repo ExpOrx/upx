@@ -2,7 +2,7 @@
 *
 *  This file is part of the UPX executable compressor.
 *
-*  Copyright (C) 2000-2025 John F. Reiser
+*  Copyright (C) John F. Reiser
 *  All Rights Reserved.
 *
 *  UPX and the UCL library are free software; you can redistribute them
@@ -65,11 +65,11 @@ __NR_exit     =   1+ __NR_Linux
 __NR_ftruncate=  93+ __NR_Linux
 __NR_getpid=     20+ __NR_Linux
 __NR_lseek=      19+ __NR_Linux
-__NR_memfd_create=354+__NR_Linux
+__NR_memfd_create=354+ __NR_Linux
 __NR_mmap=       90+ __NR_Linux
 __NR_mkdir=      39+ __NR_Linux
 __NR_mprotect = 125+ __NR_Linux
-__NR_msync =    144 + __NR_Linux
+__NR_msync =    144+ __NR_Linux
 __NR_munmap   =  91+ __NR_Linux
 __NR_oldstat=    18+ __NR_Linux
 __NR_open     =   5+ __NR_Linux
@@ -80,8 +80,7 @@ __NR_unlink=     10+ __NR_Linux
 __NR_write    =   4+ __NR_Linux
 
 PATHSIZE=4096
-OVERHEAD=2048
-#include "../src/MAX_ELF_HDR.S"
+#include "../../../src/MAX_ELF_HDR.h"
 
 MAP_PRIVATE=  0x002
 // see "#define __MAP_ANONYMOUS 0x0800" in  mips-linux-gnu/libc/usr/include/bits/mman.h
@@ -129,15 +128,85 @@ upxfn_path: .word 0  # set by elf-entry.S
 // KNOWN OFFSET == 2*NBPW == 8
 fold_begin:  b L05; nop
 
-// KNOWN OFFSET == 4*NBPW == 16
+// KNOWN OFFSET == 4*NBPW == 16  (for re-writing little_endian to BIG_ENDIAN)
 get4unal: .globl get4unal
         lwr v0,0(a0)  # little-endian (default)
+        lwl v0,3(a0)
         ret
-          lwl v0,3(a0)
+          nop  // LOAD delay slot
 
         lwl v0,0(a0)  # big-endian (replacement)
+        lwr v0,3(a0)
         ret
-          lwr v0,3(a0)
+          nop  // LOAD delay slot
+
+get_page_mask: .globl get_page_mask
+Lget_page_mask: // non-.globl
+        move v1,ra
+        bal 5f  // ra= 0f
+          lw v0,(ra)
+0:
+        .word page_mask - 0b
+5:
+          nop  // LOAD delay slot
+        addu v0,ra
+        lw v0,(v0)
+        jr v1
+          nop  // LOAD delay slot
+
+get_upxfn_path: .globl get_upxfn_path  // char * (*)(void)
+        move v1,ra
+        bal 5f  // ra= 0f
+          lw at,(ra)
+0:
+        .word upxfn_path - 0b
+5:
+          nop  // LOAD delay slot
+        addu at,ra  // &upxfn_path
+        lw v0,(at)  // offset
+          nop  // LOAD delay slot
+        beqz v0,9f  // null string
+          addu v0,at
+        jr v1
+          addiu v0,-1*NBPW
+9:
+        jr v1
+          move v0,$0
+
+#define TMP $at
+Pprotect: .globl Pprotect
+        addiu sp,-2*NBPW; sw ra,0*NBPW(sp)
+        bal Lget_page_mask
+          nop
+        not v0,v0  # fragment mask
+        lw ra,0*NBPW(sp)
+        and TMP,a0,v0
+        sub a0,TMP
+        add a1,TMP
+        li v0,__NR_mprotect; syscall
+        jr ra
+          addiu sp,2*NBPW
+
+Psync: .globl Psync
+        addiu sp,-2*NBPW; sw ra,0*NBPW(sp)
+        bal Lget_page_mask
+          nop
+        not v0,v0  # fragment mask
+        lw ra,0*NBPW(sp)
+        and TMP,a0,v0
+        sub a0,TMP
+        add a1,TMP
+
+__NR_cacheflush = 147+ __NR_Linux
+/* asm/cachectl.h */
+ICACHE= 1<<0
+DCACHE= 1<<1
+        li a2,DCACHE
+        li v0,__NR_cacheflush; syscall  // ignore failure
+
+        li v0,__NR_msync; syscall
+        jr ra
+          addiu sp,2*NBPW
 
 /* In:
     r_ADRX,r_LENX,r_elfa,r_auxv,r_PMASK
@@ -152,7 +221,6 @@ L05:
         addiu sp,(~0<<4)&-(NBPW+ 4+ PATHSIZE - sp_frame)  # alloca: new envp[0], "   =", buffer
 0:
 
-#define TMP $25
         move v1,sp
 L10:  # copy until auxv
         lw TMP,0(v0); addiu v0,NBPW
@@ -186,41 +254,6 @@ L25:  // copy auxv
         .asciz "/proc/self/exe"
         .balign 4
 
-get_page_mask: .globl get_page_mask
-Lget_page_mask:
-        move v1,ra
-        bal 5f  // ra= 0f
-          lw v0,(ra)
-0:
-        .word page_mask - 0b
-5:
-          nop
-        addu v0,ra
-        jr v1
-          lw v0,(v0)
-
-get_upxfn_path: .globl get_upxfn_path  // char * (*)(void)
-        move v1,ra
-        bal 5f  // ra= 0f
-          lw at,(ra)
-0:
-        .word upxfn_path - 0b
-5:
-          nop
-        addu at,ra  // &upxfn_path
-        lw v0,(at)  // offset
-          nop
-        beqz v0,9f  // null string
-          addu v0,at
-        jr v1
-          addiu v0,-1*NBPW
-9:
-        jr v1
-          move v0,$0
-
-close: .globl close
-        b sysgo; li v0,__NR_close
-
 L30:
         li a1,O_RDONLY
         move a0,ra  # "/proc/self/exe"
@@ -242,10 +275,10 @@ no_pse_env:
         move a2,$r_elfa  # &Elf32_Ehdr of stub
         move a1,$r_LENX  # total_size
 
-        bal upx_main  # remember that Makefile 'cat' all *.[sS]
+        bal upx_main2  # remember that Makefile 'cat' all *.[sS]
           move a0,$r_ADRX
 
-/* entry= upx_main(b_info *a0, total_size a1, Elf32_Ehdr *a2, Elf32_Auxv_t *a3,
+/* entry= upx_main2(b_info *a0, total_size a1, Elf32_Ehdr *a2, Elf32_Auxv_t *a3,
                 Elf32_Ehdr *tmp_ehdr
 */
         addiu sp,MAX_ELF_HDR_32  # un-alloca
@@ -294,7 +327,7 @@ no_map_pse:
 27d501fdbf (Denis Vlasenko           2009-01-10 21:02:48 +0000
 */
         move TMP,sp
-        addiu sp, -0x380  # estimated stack bound of upx_main and below
+        addiu sp, -0x380  # estimated stack bound of upx_main2 and below
 0:
         addiu sp,NBPW
         bne sp,TMP,0b
@@ -312,42 +345,8 @@ L40:
 
   section SYSCALLS; .set noreorder
 
-Pprotect: .globl Pprotect
-        addiu sp,-2*NBPW; sw ra,0*NBPW(sp)
-        bal Lget_page_mask
-          nop
-        not v0,v0  # fragment mask
-        lw ra,0*NBPW(sp)
-        and TMP,a0,v0
-        sub a0,TMP
-        add a1,TMP
-        li v0,__NR_mprotect; syscall
-        jr ra
-          addiu sp,2*NBPW
-
-Psync: .globl Psync
-        addiu sp,-2*NBPW; sw ra,0*NBPW(sp)
-        bal Lget_page_mask
-          nop
-        not v0,v0  # fragment mask
-        lw ra,0*NBPW(sp)
-        and TMP,a0,v0
-        sub a0,TMP
-        add a1,TMP
-
-__NR_cacheflush = 147+ __NR_Linux
-/* asm/cachectl.h */
-ICACHE= 1<<0
-DCACHE= 1<<1
-        li a2,DCACHE
-        li v0,__NR_cacheflush; syscall  // ignore failure
-
-        li v0,__NR_msync; syscall
-        jr ra
-          addiu sp,2*NBPW
-
 my_bkpt: .globl my_bkpt
-        break  # my_bkpt
+        break; nop  # my_bkpt
         jr ra
           nop
 
@@ -426,6 +425,8 @@ exit: .globl exit
         b sysgo; li v0,__NR_exit
 brk: .globl brk
         b sysgo; li v0,__NR_brk
+close: .globl close
+        b sysgo; li v0,__NR_close
 ftruncate: .globl ftruncate
         b sysgo; li v0,__NR_ftruncate
 getpid: .globl getpid

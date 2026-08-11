@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -54,8 +54,8 @@ public:
     void verifyUnfilter();
     bool scan(SPAN_0(const byte) buf, unsigned buf_len);
 
-    static bool isValidFilter(int filter_id);
-    static bool isValidFilter(int filter_id, const int *allowed_filters);
+    static bool isValidFilter(int filter_id) noexcept;
+    static bool isValidFilter(int filter_id, const int *allowed_filters) noexcept;
 
 public:
     // Will be set by each call to filter()/unfilter().
@@ -112,7 +112,7 @@ private:
     };
 
     // get a specific filter entry
-    static const FilterEntry *getFilter(int id);
+    static const noinline FilterEntry *getFilter(int id) noexcept;
 
 private:
     // strictly private filter database

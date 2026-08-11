@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,6 +31,8 @@
 #include "packer.h"
 #include "pefile.h"
 #include "p_wince_arm.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -128,7 +130,7 @@ void PackWinCeArm::buildLoader(const Filter *ft) {
     unsigned size = use_thumb_stub ? sizeof(stub_arm_v4t_wince_pe) : sizeof(stub_arm_v4a_wince_pe);
 
     // prepare loader
-    initLoader(loader, size);
+    initLoader(EM_386, loader, size);
 
     if (isdll)
         addLoader("DllStart");

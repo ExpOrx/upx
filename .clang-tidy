@@ -20,6 +20,7 @@ Checks: >
     -bugprone-suspicious-memory-comparison,
     -bugprone-suspicious-string-compare,
     -bugprone-switch-missing-default-case,
+    -bugprone-unintended-char-ostream-output,
   clang-analyzer-*,
     -clang-analyzer-optin.performance.Padding,
     -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,

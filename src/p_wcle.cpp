@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -31,6 +31,8 @@
 #include "packer.h"
 #include "lefile.h"
 #include "p_wcle.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -83,7 +85,7 @@ Linker *PackWcle::newLinker() const { return new ElfLinkerX86; }
 
 void PackWcle::buildLoader(const Filter *ft) {
     // prepare loader
-    initLoader(stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
+    initLoader(EM_386, stub_i386_dos32_watcom_le, sizeof(stub_i386_dos32_watcom_le));
     addLoader("IDENTSTR,WCLEMAIN", ph.first_offset_found == 1 ? "WCLEMAIN02" : "",
               "WCLEMAIN03,UPX1HEAD,WCLECUTP");
 
@@ -126,17 +128,19 @@ tribool PackWcle::canPack() {
 // elements (of course I still have to handle empty bundles)
 
 void PackWcle::encodeEntryTable() {
-    unsigned count, object, n;
-    byte *p = ientries;
+    unsigned count, n;
+    SPAN_S_VAR(byte, p, ientries, soentries);
     n = 0;
     while (*p) {
         count = *p;
         n += count;
         if (p[1] == 0) // unused bundle
             p += 2;
-        else if (p[1] == 3) // 32-bit bundle
-        {
-            object = get_le16(p + 2) - 1;
+        else if (p[1] == 3) { // 32-bit bundle
+            unsigned object = get_le16(p + 2);
+            if (object == 0 || object > objects)
+                throwCantPack("bad object number in entry table");
+            object -= 1;
             set_le16(p + 2, 1);
             p += 4;
             for (; count; count--, p += 5)
@@ -386,7 +390,7 @@ void PackWcle::encodeImage(Filter *ft) {
     ifixups = nullptr;
 
     mb_oimage.allocForCompression(isize, RESERVED + 512);
-    oimage = mb_oimage; // => now a SPAN_S
+    oimage = SPAN_S_MAKE(byte, mb_oimage); // => now a SPAN_S
     // prepare packheader
     ph.u_len = isize;
     // prepare filter [already done]
@@ -427,6 +431,8 @@ void PackWcle::pack(OutputFile *fo) {
 
     if (ih.init_ss_object != objects)
         throwCantPack("the stack is not in the last object");
+    if (ih.init_cs_object == 0 || ih.init_cs_object > objects)
+        throwCantPack("bad init_cs_object");
 
     preprocessFixups();
 
@@ -567,7 +573,7 @@ void PackWcle::decodeFixups() {
             }
         }
         // Guard against run-away.
-        static byte const blank[9] = {0};
+        static const byte blank[9] = {};
         // catastrophic worst case or no-good early warning
         if (ptr_diff_bytes(oimage + ph.u_len - sizeof(blank), raw_bytes(q, 0)) < 0 ||
             !memcmp(blank, q, sizeof(blank))) {
@@ -690,7 +696,7 @@ void PackWcle::decodeObjectTable() {
 
 void PackWcle::decodeImage() {
     mb_oimage.allocForDecompression(ph.u_len);
-    oimage = mb_oimage; // => now a SPAN_S
+    oimage = SPAN_S_MAKE(byte, mb_oimage); // => now a SPAN_S
 
     decompress(iimage + ph.buf_offset + ph.getPackHeaderSize(), oimage);
     soimage = get_le32(oimage + ph.u_len - 5);
@@ -699,7 +705,7 @@ void PackWcle::decodeImage() {
 }
 
 void PackWcle::decodeEntryTable() {
-    unsigned count, object, n, r;
+    unsigned count, n, r;
     SPAN_S_VAR(byte, p, ientries, soentries);
     n = 0;
     while (*p) {
@@ -707,9 +713,8 @@ void PackWcle::decodeEntryTable() {
         n += count;
         if (p[1] == 0) // unused bundle
             p += 2;
-        else if (p[1] == 3) // 32-bit offset bundle
-        {
-            object = get_le16(p + 2);
+        else if (p[1] == 3) { // 32-bit offset bundle
+            unsigned object = get_le16(p + 2);
             if (object != 1)
                 throwCantUnpack("corrupted entry found");
             object = soobject_table;

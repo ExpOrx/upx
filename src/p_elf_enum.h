@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -108,7 +108,8 @@ class Dummy {
         /* Register usage information. */ //
         //      PT_MIPS_RTPROC =   0x70000001, /* Runtime procedure table. */
         //      PT_MIPS_OPTIONS =  0x70000002,
-        PT_MIPS_ABIFLAGS = 0x70000003, /* FP mode requirement. */
+        PT_ARM_EXIDX = (0x70000000 + 1), /* ARM unwind segment.  */
+        PT_MIPS_ABIFLAGS = 0x70000003,   /* FP mode requirement. */
     };
 
     enum {        // p_flags
@@ -148,6 +149,7 @@ class Dummy {
 
         SHT_LOOS = 0x60000000,                 /* LOcal OS; SHT_ANDROID_REL{,A} is +1, +2 */
         SHT_LOPROC = 0x70000000,               /* Start of processor-specific */
+        SHT_ARM_EXIDX = (SHT_LOPROC + 1),      /* ARM unwind section.  */
         SHT_ARM_ATTRIBUTES = (SHT_LOPROC + 3), /* ARM attributes section.  */
     };
 
@@ -264,6 +266,7 @@ class Dummy {
         R_ARM_RELATIVE = 23,
         R_PPC_RELATIVE = 22,
         R_PPC64_RELATIVE = R_PPC_RELATIVE,
+        R_RISCV_RELATIVE = 3,
         R_X86_64_RELATIVE = 8,
 
         R_386_JMP_SLOT = 7,
@@ -282,6 +285,7 @@ class Dummy {
         R_X86_64_64 = 1,
         R_AARCH64_ABS64 = 257,
         R_AARCH64_GLOB_DAT = 1025,
+        R_RISCV_64 = 2,
 
     };
 #endif // WANT_REL_ENUM

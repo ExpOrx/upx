@@ -2,7 +2,7 @@
 @
 @  This file is part of the UPX executable compressor.
 @
-@  Copyright (C) 2000-2025 John F. Reiser
+@  Copyright (C) John F. Reiser
 @  All Rights Reserved.
 @
 @  UPX and the UCL library are free software; you can redistribute them
@@ -62,14 +62,8 @@ PATH_MAX= 4096
 #define TRACE_REGS r0-r12,r14,r15
 #endif  /*}*/
 
-#define OVERHEAD 2048
 #define call bl
-#include "MAX_ELF_HDR.S"
-
-ZERO=       . - 3*NBPW
-page_mask=  . - 3*NBPW; .globl page_mask
-qflg_data = . - 2*NBPW  // QNX vs Linux: MAP_PRIVATE | MAP_ANONYMOUS
-upxfn_path= . - 1*NBPW  // displacement from "zero"
+#include "../../MAX_ELF_HDR.h"
 
 arg1  .req r0
 arg2  .req r1
@@ -77,6 +71,12 @@ arg3  .req r2
 arg4  .req r3
 arg5  .req r4
 arg6  .req r5
+
+ZERO=       . - 4*NBPW  // 4 words initialized prior to unfolded code
+page_mask=  . - 4*NBPW
+qflg_data = . - 3*NBPW  // QNX vs Linux: MAP_PRIVATE | MAP_ANONYMOUS
+upxfn_path= . - 2*NBPW  // displacement from ZERO
+cancel_sigsegv= . - 1*NBPW
 
 fold_begin:  // enter here
         b L05  // put page_mask and qflg_data within short-displacement of uses
@@ -141,20 +141,21 @@ mmap_do: // sp: saved r4,r5,lr
 
 proc_self_exe: .asciz "/proc/self/exe"; .balign 4
 
-// In:  sp/ F_ADRX,F_LENX,F_ELFA,F_ADRU,F_LENU,F_R0,F_R1,%F_ENTR,F_argc
+// In:  sp/ F_ADRX,F_LENX,F_ELFA,f_SEGV,F_ADRU,F_LENU,F_R0,F_R1,%F_ENTR,F_argc
 //   [ADRX, +LENX) = extent of compressed program
 //   [ADRU, +LENU) = params to munmap unfolded stub
-F_ADRX=  0*NBPW
+F_ADRX= 0*NBPW
   F_obinfo= F_ADRX  // unmap_all_pages in lo bits
-F_LENX=  1*NBPW
-F_ELFA=  2*NBPW
-F_ADRU=  3*NBPW
-F_LENU=  4*NBPW
-F_R0=    5*NBPW
-F_R1=    6*NBPW
-F_ENTR=  7*NBPW
-  F_qflg = F_ENTR  // QNX mmap flags
-F_ARGC=  8*NBPW
+F_LENX= 1*NBPW
+F_ELFA= 2*NBPW
+F_SEGV= 3*NBPW
+F_ADRU= 4*NBPW
+F_LENU= 5*NBPW
+F_R0=   6*NBPW
+F_R1=   7*NBPW
+F_ENTR= 8*NBPW
+  F_qflg= F_ENTR  // QNX mmap flags
+F_argc= 9*NBPW
 
 is_ptinterp=     (1<<0)
 unmap_all_pages= (1<<1)
@@ -162,17 +163,17 @@ unmap_all_pages= (1<<1)
 /* In:
    r4= ADRX | unmap_all_pages
    r5= LENX
-sp/ ADRX|uap,LENX,ELFA,ADRU,LENU,r0,r1,%entry, argc,argv,0,envp,0,auxv
+sp/ ADRX|uap,LENX,ELFA,r0,r1,%entry,SEGV,ADRU,LENU, argc,argv,0,envp,0,auxv
         (ADRX,LENX) = extent of compressed program
         (ADRU,LENU) = params to munmap unfolded stub
 */
 
 L05:
-        ldmia sp!,{r4,r5,r6,r7,r8,r9,r10,r11,r12}  // F_ADRX .. F_ARGC
+        ldmia sp!,{r3,r4,r5,r6,r7,r8,r9,r10,r11,r12}  // F_ADRX .. F_ARGC
         mov r1,sp  @ src
-        tst r4,#unmap_all_pages; bne 0f; sub sp,sp,#PATH_MAX; 0:
+        tst r3,#unmap_all_pages; bne 0f; sub sp,sp,#PATH_MAX; 0:
         mov r0,sp  @ dst
-        stmdb sp!,{r4,r5,r6,r7,r8,r9,r10,r11,r12}
+        stmdb sp!,{r3,r4,r5,r6,r7,r8,r9,r10,r11,r12}
 
 0: // copy argv down
         ldr r3,[r1],#NBPW; cmp r3,#0
@@ -241,19 +242,22 @@ r_auxe .req r10
         mov sp,r0
 no_pse_env:
 
-/* Construct arglist for upx_main */
+/* Construct arglist for upx_main2 */
         ldmia sp!,{arg1,arg2,arg3}  @ pop: ADRX, LENX, elfaddr
         stmdb sp!,{arg1,arg2,arg3}  @ put back
         bic arg1,arg1,#unmap_all_pages  // ADRX
 r_elfa .req r9
         mov r_elfa,arg3  // save elfaddr
         //mov arg4,r3  @ auxv
-        sub sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ alloca
+        sub sp,sp,#MAX_ELF_HDR_32  @ alloca
         stmdb sp!,{sp}  // arg5  &tmp_ehdr
-        call upx_main
+        call upx_main2
         add sp,sp,#NBPW  // toss arg5
-        add sp,sp,#MAX_ELF_HDR_32 + OVERHEAD  @ un-alloca
+        add sp,sp,#MAX_ELF_HDR_32  @ un-alloca
         str r0,[sp,#F_ENTR]  @ entry address
+
+        adr lr,0f; ldr pc,[sp,#F_SEGV]  // cancel_sigsegv
+0:
 
 // Map 1 page of /proc/self/exe so that it does not disappear
         ldr r0,[sp,#F_obinfo]; tst r0,#unmap_all_pages; bne no_map_pse
@@ -290,7 +294,7 @@ sweep:
         add sp,sp,#(1<<18)  @ pop stack
 #endif  //}
 
-        add sp,sp,#3*NBPW  // toss F_ADRX,F_LENX,F_ELFA
+        add sp,sp,#4*NBPW  // toss F_ADRX,F_LENX,F_ELFA,F_SEGV
         ldmia sp!,{arg1,arg2}  @ F_ADRU,F_LENU
         stmdb sp!,{r_auxe}
         mov r3,#0  @ clear registers: paranoia
@@ -315,6 +319,9 @@ sweep:
 #endif  /*}*/
         ldmia sp!,{r12}  // r_auxe
         ldr pc,[r12,#NBPW -2*NBPW]  @ hatch: Elf32_auxv_t[AT_NULL@.a_type].a_val
+          // hatch:
+          // svc 0  // In: r7= __NR_munmap; arg1= F_ADRU; arg2= F_LENU
+          // pop {r0,r1,pc}  // F_R0, F_R1, F_ENTR
 
 f_unfilter:  @ (char *ptr, uint len, uint cto, uint fid)
         ptr  .req r0

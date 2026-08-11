@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -263,20 +263,10 @@ forceinline bele_constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept {
 #else
 
 forceinline constexpr unsigned bswap16(unsigned v) noexcept {
-#if defined(__riscv) && __riscv_xlen == 64
-    return (unsigned) __builtin_bswap64(upx_uint64_t(v) << 48);
-#else
-    // return __builtin_bswap16(upx_uint16_t(v & 0xffff));
-    return __builtin_bswap32(v << 16);
-#endif
+    // return __builtin_bswap32(v << 16);
+    return __builtin_bswap16(upx_uint16_t(v & 0xffff));
 }
-forceinline constexpr unsigned bswap32(unsigned v) noexcept {
-#if defined(__riscv) && __riscv_xlen == 64
-    return (unsigned) __builtin_bswap64(upx_uint64_t(v) << 32);
-#else
-    return __builtin_bswap32(v);
-#endif
-}
+forceinline constexpr unsigned bswap32(unsigned v) noexcept { return __builtin_bswap32(v); }
 forceinline constexpr upx_uint64_t bswap64(upx_uint64_t v) noexcept { return __builtin_bswap64(v); }
 
 #endif
@@ -295,13 +285,15 @@ forceinline constexpr upx_uint64_t no_bswap64(upx_uint64_t v) noexcept { return 
 #define ne16_to_le16(v) bswap16(v)
 #define ne32_to_le32(v) bswap32(v)
 #define ne64_to_le64(v) bswap64(v)
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
 #define ne16_to_be16(v) bswap16(v)
 #define ne32_to_be32(v) bswap32(v)
 #define ne64_to_be64(v) bswap64(v)
 #define ne16_to_le16(v) no_bswap16(v)
 #define ne32_to_le32(v) no_bswap32(v)
 #define ne64_to_le64(v) no_bswap64(v)
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 
 /*************************************************************************
@@ -360,8 +352,12 @@ inline constexpr unsigned get_be24(const byte *p) noexcept {
 inline constexpr unsigned get_le24(const byte *p) noexcept {
     return upx::compile_time::get_le24(p);
 }
+inline constexpr unsigned get_ne24(const byte *p) noexcept {
+    return upx::compile_time::get_ne24(p);
+}
 inline constexpr void set_be24(byte *p, unsigned v) noexcept { upx::compile_time::set_be24(p, v); }
 inline constexpr void set_le24(byte *p, unsigned v) noexcept { upx::compile_time::set_le24(p, v); }
+inline constexpr void set_ne24(byte *p, unsigned v) noexcept { upx::compile_time::set_ne24(p, v); }
 
 REQUIRE_XE24
 forceinline bele_constexpr unsigned get_be24(const XE24 *p) noexcept {
@@ -372,12 +368,20 @@ forceinline bele_constexpr unsigned get_le24(const XE24 *p) noexcept {
     return get_le24(upx::ptr_static_cast<const byte *>(p));
 }
 REQUIRE_XE24
+forceinline bele_constexpr unsigned get_ne24(const XE24 *p) noexcept {
+    return get_ne24(upx::ptr_static_cast<const byte *>(p));
+}
+REQUIRE_XE24
 forceinline bele_constexpr void set_be24(XE24 *p, unsigned v) noexcept {
     set_be24(upx::ptr_static_cast<byte *>(p), v);
 }
 REQUIRE_XE24
 forceinline bele_constexpr void set_le24(XE24 *p, unsigned v) noexcept {
     set_le24(upx::ptr_static_cast<byte *>(p), v);
+}
+REQUIRE_XE24
+forceinline bele_constexpr void set_ne24(XE24 *p, unsigned v) noexcept {
+    set_ne24(upx::ptr_static_cast<byte *>(p), v);
 }
 
 REQUIRE_XE32
@@ -894,35 +898,35 @@ struct alignas(1) LE64 final {
 
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const BE16 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const BE16 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const BE32 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const BE32 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const LE16 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const LE16 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator+(T *ptr, const LE32 &v) noexcept {
-    return ptr + unsigned(v);
+    return ptr + size_t(unsigned(v));
 }
 template <class T>
 inline bele_constexpr T *operator-(T *ptr, const LE32 &v) noexcept {
-    return ptr - unsigned(v);
+    return ptr - size_t(unsigned(v));
 }
 
 // these are not implemented on purpose and will cause errors
@@ -980,13 +984,13 @@ inline bele_constexpr T align_down(const LE32 &a, const T &b) noexcept {
 }
 
 REQUIRE_UINT32
-inline bele_constexpr T align_up(const T &a, const LE32 &b) noexcept { return align_up(a, T(b)); }
-REQUIRE_UINT32
-inline bele_constexpr T align_up(const LE32 &a, const T &b) noexcept { return align_up(T(a), b); }
-REQUIRE_UINT32
 inline bele_constexpr T align_up(const T &a, const BE32 &b) noexcept { return align_up(a, T(b)); }
 REQUIRE_UINT32
 inline bele_constexpr T align_up(const BE32 &a, const T &b) noexcept { return align_up(T(a), b); }
+REQUIRE_UINT32
+inline bele_constexpr T align_up(const T &a, const LE32 &b) noexcept { return align_up(a, T(b)); }
+REQUIRE_UINT32
+inline bele_constexpr T align_up(const LE32 &a, const T &b) noexcept { return align_up(T(a), b); }
 
 REQUIRE_UINT32
 inline bele_constexpr T min(const T &a, const BE16 &b) noexcept { return min(a, T(b)); }
@@ -1085,7 +1089,7 @@ TT_UPX_IS_INTEGRAL(LE32);
 TT_UPX_IS_INTEGRAL(LE64);
 #undef TT_UPX_IS_INTEGRAL
 
-// native types
+// NE - Native Endianness (aka Host Endianness aka CPU Endianness)
 #if (ACC_ABI_BIG_ENDIAN)
 typedef BE16 NE16;
 typedef BE32 NE32;
@@ -1096,7 +1100,7 @@ typedef BE64 NE64;
 #define ne16_compare_signed be16_compare_signed
 #define ne32_compare_signed be32_compare_signed
 #define ne64_compare_signed be64_compare_signed
-#else
+#elif (ACC_ABI_LITTLE_ENDIAN)
 typedef LE16 NE16;
 typedef LE32 NE32;
 typedef LE64 NE64;
@@ -1106,6 +1110,8 @@ typedef LE64 NE64;
 #define ne16_compare_signed le16_compare_signed
 #define ne32_compare_signed le32_compare_signed
 #define ne64_compare_signed le64_compare_signed
+#else
+#error "ACC_ABI_ENDIAN"
 #endif
 
 /*************************************************************************

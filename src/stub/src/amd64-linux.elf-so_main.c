@@ -2,9 +2,9 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2021 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2021 Laszlo Molnar
-   Copyright (C) 2000-2025 John F. Reiser
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
+   Copyright (C) John F. Reiser
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -39,6 +39,7 @@ extern int Punmap(void *, size_t);
 extern int Psync(void const *, size_t, unsigned);
 extern size_t Pwrite(unsigned, void const *, size_t);
 #define MS_SYNC 4
+#define MFD_EXEC 0x10
 
 extern void f_int3(int arg);
 
@@ -79,6 +80,15 @@ extern void f_int3(int arg);
 /*out*/ : "=r"(r_fmt) \
 /* in*/ : \
 /*und*/ : "x30"); \
+    dprintf(r_fmt, args); \
+})
+#elif defined(__riscv) //}{
+#define DPRINTF(fmt, args...) ({ \
+    char const *r_fmt; \
+    asm("jal %0, 0f; .string \"" fmt "\"; .balign 4; 0:" \
+/*out*/ : "=r"(r_fmt) \
+/* in*/ : \
+/*und*/ : ); \
     dprintf(r_fmt, args); \
 })
 
@@ -237,6 +247,15 @@ ERR_LAB
 /*und*/ : "x30"); \
     str; \
 })
+#elif defined(__riscv) //}{
+#define addr_string(string) ({ \
+    char const *str; \
+    asm("jal %0,0f; .string \"" string "\"; .balign 4; 0:" \
+/*out*/ : "=r"(str) \
+/* in*/ : \
+/*und*/ : ); \
+    str; \
+})
 #else  //}{
        error;
 #endif  //}
@@ -331,7 +350,44 @@ make_hatch(
     DPRINTF("hatch=%%p\\n", hatch);
     return hatch;
 }
-#elif defined(__aarch64__)  //{
+#elif defined(__riscv)  //}{
+extern void *my_memcpy(void *, const void *, long unsigned int);
+
+static void * __attribute__((noinline))
+make_hatch(
+    ElfW(Phdr) const *const phdr,
+    char *next_unc,
+    unsigned const frag_mask
+)
+{
+    unsigned long a = (unsigned long)next_unc;
+    short *hatch = (short *)((1u & a) + a);
+#define SZ_CODE (8*sizeof(short))
+    char const *code;  // embedded "\x00" terminates!
+    asm("jal %0,0f; \
+        .int 0x00000073; \
+        .short 0x6502, 0x65a2, 0x6642, 0x60e2, 0x6105; \
+        .short 0x8082; \
+     0: .balign 4" \
+/*out*/ : "=r"(code) \
+/* in*/ : \
+/*und*/ : );
+    DPRINTF("make_hatch %%p %%p %%x\\n", phdr, next_unc, frag_mask);
+    if (phdr->p_type==PT_LOAD && phdr->p_flags & PF_X) {
+        if (SZ_CODE <= (unsigned)(frag_mask & -(long)hatch)) {
+            my_memcpy(hatch, code, SZ_CODE);
+        }
+        else { // Does not fit at hi end of .text, so must use a new page "permanently"
+            int mfd = memfd_create(addr_string("upx"), MFD_EXEC);  // the directory entry
+            write(mfd, &code, SZ_CODE);
+            hatch = mmap(0, SZ_CODE, PROT_READ|PROT_EXEC, MAP_SHARED, mfd, 0);
+            close(mfd);
+        }
+    }
+    DPRINTF("hatch=%%p\\n", hatch);
+    return hatch;
+}
+#elif defined(__aarch64__)  //}{
 static char *
 make_hatch(
     ElfW(Phdr) const *const phdr,
@@ -385,6 +441,10 @@ make_hatch(
         ) >> ((pf & (PF_R|PF_W|PF_X))<<2) ))
 
 #undef PAGE_MASK
+
+#if defined(__riscv)  //{  why is riscv the only one?
+extern ElfW(Addr) get_page_mask(void);
+#else  //}{
 static ElfW(Addr)
 get_page_mask(void)  // the mask which KEEPS the page, discards the offset
 {
@@ -404,9 +464,10 @@ get_page_mask(void)  // the mask which KEEPS the page, discards the offset
     DPRINTF("get_page_mask= %%p\\n", rv);
     return rv;
 }
+#endif  //}
 
 extern void *memcpy(void *dst, void const *src, size_t n);
-extern void *memset(void *dst, unsigned val, size_t n);
+extern void *memset(void *dst, int val, size_t n);
 
 // maximum page sizes
 #if defined(__powerpc64__) || defined(__powerpc__)

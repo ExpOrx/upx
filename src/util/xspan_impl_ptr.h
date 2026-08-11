@@ -2,7 +2,7 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -51,9 +51,9 @@ private:
     pointer ptr;
 
     // enforce config invariants at constructor time - static functions
-    static inline pointer makePtr(pointer p) { return p; }
+    static forceinline pointer makePtr(pointer p) { return p; }
     // inverse logic for ensuring valid pointers from existing objects
-    inline pointer ensurePtr() const { return ptr; }
+    forceinline pointer ensurePtr() const { return ptr; }
     // debug
     forceinline void assertInvariants() const noexcept {}
 
@@ -80,6 +80,8 @@ public:
         ptr_invalidate_and_poison(ptr); // point to non-null invalid address
         assertInvariants();
     }
+
+    // inline CSelf() : ptr(nullptr) { invalidate(); }
     inline CSelf() { assertInvariants(); }
 
     // constructors from pointers
@@ -123,16 +125,24 @@ public:
         return assign(Self(other));
     }
 
+    // subtraction - ptrdiff_t
+    template <class U>
+    XSPAN_REQUIRES_CONVERTIBLE_R(ptrdiff_t)
+    operator-(const CSelf<U> &other) const {
+        assertInvariants();
+        other.assertInvariants();
+        return check_ptrdiff(ptr, other.ptr);
+    }
+
     // cast to a different type (creates a new value)
     template <class U>
-    inline CSelf<U> type_cast() const {
+    CSelf<U> type_cast() const {
         typedef CSelf<U> R;
         typedef typename R::pointer rpointer;
         return R(upx::ptr_static_cast<rpointer>(ptr));
     }
 
     // comparison
-
     bool operator==(pointer other) const noexcept { return ptr == other; }
     template <class U>
     XSPAN_REQUIRES_CONVERTIBLE_R(bool)
@@ -200,15 +210,23 @@ private:
     static forceinline pointer check_deref(pointer p) noexcept { return p; }
     static forceinline pointer check_deref(pointer p, ptrdiff_t n) noexcept { return p + n; }
     static forceinline pointer check_add(pointer p, ptrdiff_t n) noexcept { return p + n; }
+    static forceinline ptrdiff_t check_ptrdiff(pointer a, pointer b) noexcept { return a - b; }
+
+    // disable taking the address => force passing by reference
+    // [I'm not too sure about this design decision, but we can always allow it if needed]
+    Self *operator&() const XSPAN_DELETED_FUNCTION;
 
 public: // raw access
     pointer raw_ptr() const noexcept { return ptr; }
 
-    pointer raw_bytes(size_t bytes) const {
+    pointer raw_bytes(size_t bytes) const may_throw {
         assertInvariants();
         if (bytes > 0) {
             if very_unlikely (ptr == nullptr)
                 xspan_fail_nullptr();
+            if very_unlikely (__acc_cte(VALGRIND_CHECK_MEM_IS_ADDRESSABLE(ptr, bytes) != 0))
+                throwCantPack("raw_bytes valgrind-check-mem");
+            (void) mem_size_ptr(ptr, 1, bytes); // assert size
         }
         return ptr;
     }
@@ -226,7 +244,7 @@ inline typename Ptr<T>::pointer raw_index_bytes(const Ptr<T> &a, size_t index,
                                                 size_t size_in_bytes) {
     typedef typename Ptr<T>::element_type element_type;
     if very_unlikely (a.raw_ptr() == nullptr)
-        throwInternalError("raw_index_bytes unexpected NULL ptr");
+        throwCantPack("raw_index_bytes unexpected NULL ptr");
     return a.raw_bytes(mem_size(sizeof(element_type), index, size_in_bytes)) + index;
 }
 

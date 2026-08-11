@@ -2,8 +2,8 @@
 
    This file is part of the UPX executable compressor.
 
-   Copyright (C) 1996-2025 Markus Franz Xaver Johannes Oberhumer
-   Copyright (C) 1996-2025 Laszlo Molnar
+   Copyright (C) Markus Franz Xaver Johannes Oberhumer
+   Copyright (C) Laszlo Molnar
    All Rights Reserved.
 
    UPX and the UCL library are free software; you can redistribute them
@@ -30,6 +30,8 @@
 #include "filter.h"
 #include "packer.h"
 #include "p_exe.h"
+#define WANT_EHDR_ENUM 1
+#include "p_elf_enum.h"
 #include "linker.h"
 
 static const CLANG_FORMAT_DUMMY_STATEMENT
@@ -128,7 +130,7 @@ void PackExe::buildLoader(const Filter *) {
     exe_header_t dummy_oh;
     int flag = fillExeHeader(&dummy_oh);
 
-    initLoader(stub_i086_dos16_exe, sizeof(stub_i086_dos16_exe));
+    initLoader(EM_386, stub_i086_dos16_exe, sizeof(stub_i086_dos16_exe));
 
     if (M_IS_LZMA(ph.method)) {
         addLoader("LZMA_DEC00", opt->small ? "LZMA_DEC10" : "LZMA_DEC20", "LZMA_DEC30",
@@ -167,7 +169,7 @@ void PackExe::buildLoader(const Filter *) {
 
         info("lzma+relocator code compressed: %u -> %u", lsize, c_len_lzma);
         // reinit the loader
-        initLoader(stub_i086_dos16_exe, sizeof(stub_i086_dos16_exe));
+        initLoader(EM_386, stub_i086_dos16_exe, sizeof(stub_i086_dos16_exe));
         // prepare loader
         if (device_driver)
             addLoader("DEVICEENTRY,LZMADEVICE,DEVICEENTRY2");
@@ -614,7 +616,7 @@ void PackExe::unpack(OutputFile *fo) {
     SPAN_0_VAR(byte, relocs, nullptr);
     if (!(flag & NORELOC)) {
         mb_relocs.alloc(4 * MAXRELOCSIZE);
-        relocs = mb_relocs; // => now a SPAN_S
+        relocs = SPAN_S_MAKE(byte, mb_relocs); // => now a SPAN_S
 
         relocsize = get_le16(obuf + ph.u_len - 2);
         ph.u_len -= 2;
